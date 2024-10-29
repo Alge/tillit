@@ -18,7 +18,9 @@ type Package struct {
 	CreatedAt time.Time `json:"created_at"` // Timestamp of when the package was created
 }
 
-func (p *Package) New(name string, version string, hash string) (*Package, error) {
+func NewPackage(name string, version string, hash string) (*Package, error) {
+	p := &Package{}
+
 	p.Name = name
 	p.Version = version
 	p.Hash = hash
@@ -29,7 +31,6 @@ func (p *Package) New(name string, version string, hash string) (*Package, error
 		p.ID = id.String()
 	}
 
-	p.CreatedAt = time.Now().UTC()
 	return p, nil
 }
 
