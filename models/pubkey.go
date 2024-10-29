@@ -15,7 +15,9 @@ type PubKey struct {
 	Key     string    `json:"key"`
 }
 
-func (p *PubKey) New() (*PubKey, error) {
+func NewPubKey() (*PubKey, error) {
+
+	p := &PubKey{}
 
 	if id, err := uuid.NewRandom(); err != nil {
 		return p, err
@@ -23,6 +25,5 @@ func (p *PubKey) New() (*PubKey, error) {
 		p.ID = id.String()
 	}
 
-	p.CreatedAt = time.Now().UTC()
 	return p, nil
 }

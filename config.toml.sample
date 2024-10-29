@@ -1,6 +1,6 @@
 
 [jwt]
-Secret = "replacethis"
+Secret = "replacethiswithsomethingsupersecret"
 
 [server]
 HostName = "localhost"
@@ -11,8 +11,6 @@ RequestLimit = 100
 WindowLength = 60
 
 [database]
-UseDb = "sqlite"
-
-[database.sqlite]
-DBPath = "tillit.db.sqlite3"
+Type = "sqlite"
+DSN = "tillit.db.sqlite3"
 

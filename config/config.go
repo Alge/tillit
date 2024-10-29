@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,7 @@ type (
 		Server    server
 		JWT       jwt
 		Ratelimit ratelimit
+		Database  database
 	}
 	server struct {
 		HostName string
@@ -31,6 +33,11 @@ type (
 		// Window length in seconds
 		WindowLength int
 	}
+
+	database struct {
+		Type string
+		DSN  string
+	}
 )
 
 func (cfg *Config) Validate() error {
@@ -43,6 +50,10 @@ func (cfg *Config) Validate() error {
 	}
 
 	if err := cfg.Ratelimit.Validate(); err != nil {
+		return err
+	}
+
+	if err := cfg.Database.Validate(); err != nil {
 		return err
 	}
 
@@ -76,6 +87,23 @@ func (r *ratelimit) Validate() error {
 	return nil
 }
 
+func (d *database) Validate() error {
+
+	switch d.Type {
+	case "sqlite":
+	case "":
+		return errors.New("Database type missing")
+	default:
+		return errors.New(fmt.Sprintf("Unknown DB type: '%s'", d.Type))
+	}
+
+	if len(d.DSN) == 0 {
+		return errors.New("Missing database DSN")
+	}
+
+	return nil
+}
+
 var AppConfig *Config
 
 func (cfg *Config) String() string {
@@ -85,11 +113,13 @@ func (cfg *Config) String() string {
 	ret += "\tHostName: " + cfg.Server.HostName + "\n"
 	ret += "\tPort: " + strconv.Itoa(cfg.Server.Port) + "\n"
 	ret += "JWT:\n"
-	//	ret += "\tSecret: " + strings.Repeat("*", len(cfg.JWT.SecretBytes)) + "\n"
 	ret += "\tSecret: " + strings.Repeat("*", 16) + "\n"
 	ret += "Ratelimit:\n"
 	ret += "\tRequestLimit: " + strconv.Itoa(cfg.Ratelimit.RequestLimit) + "\n"
 	ret += "\tWindowLength: " + strconv.Itoa(cfg.Ratelimit.WindowLength) + " seconds\n"
+	ret += "Database:\n"
+	ret += "\tType: " + cfg.Database.Type + "\n"
+	ret += "\tDSN: " + cfg.Database.DSN + "\n"
 
 	return ret
 }
