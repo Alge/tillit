@@ -1,0 +1,18 @@
+
+[jwt]
+Secret = "replacethis"
+
+[server]
+HostName = "localhost"
+Port = 8080
+
+[ratelimit]
+RequestLimit = 100
+WindowLength = 60
+
+[database]
+UseDb = "sqlite"
+
+[database.sqlite]
+DBPath = "tillit.db.sqlite3"
+
