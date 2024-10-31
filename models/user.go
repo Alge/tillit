@@ -2,43 +2,29 @@ package models
 
 import (
 	"fmt"
-	//"github.com/google/uuid"
-	"gorm.io/gorm"
+	"github.com/google/uuid"
 )
 
 // User represents a user with an ID, username, public key, and creation timestamp.
 
 type User struct {
-  gorm.Model
-	ID          string       `json:"id" gorm:"primaryKey"`
+	ID          string       `json:"id"`
 	Username    string       `json:"username"`
-	PubKeys     []PubKey     `json:"pubkeys" gorm:"foreignKey:Owner;references:ID"`
-	Connections []Connection `json:"connections" gorm:"foreignKey:Owner;references:ID"`
+	PubKeys     []PubKey     `json:"pubkeys"`
+	Connections []Connection `json:"connections"`
 }
 
-/*
-type User struct {
-	ID          string       `json:"id" gorm:"type:uuid;primaryKey;default:uuid_generate_v4().String()"`
-	Username    string       `json:"username"`
-	PubKeys     []PubKey     `json:"pubkeys" gorm:"foreignKey:Owner;references:ID"`
-	Connections []Connection `json:"connections" gorm:"foreignKey:Owner;references:ID"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
-}
-*/
 
 func NewUser() (*User, error) {
 
 	u := &User{}
 
-  /*
 	if id, err := uuid.NewRandom(); err != nil {
 		return u, err
 	} else {
 		u.ID = id.String()
 	}
-  */
+
 	return u, nil
 }
 
