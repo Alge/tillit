@@ -1,51 +1,55 @@
 package db
 
 import (
-	_ "fmt"
-
+  "fmt"
 	"errors"
-
-	"gorm.io/gorm"
+  
+  "database/sql"
+  _ "github.com/mattn/go-sqlite3"
 
 	"github.com/Alge/tillit/models"
 )
 
-var DB *gorm.DB
+var DB *sql.DB
 var initialized bool
 
-func Init(dialector gorm.Dialector, opts ...gorm.Option) error {
+type DatabaseConnector interface{
+  GetUser(id string) (*models.User, error)
+  CreateUser(u *models.User) error
+  DeleteUser(u *models.User) error
 
-	database, err := gorm.Open(dialector, opts...)
-	if err != nil {
-		return err
-	}
+  GetConnection(id string) (*models.Connection, error)
+  GetUserConnections(userID string) ([]*models.Connection, error)
+  CreateConnection(u *models.Connection) error
+  DeleteConnection(u *models.Connection) error
 
-	// Automigrate all model schemas. TODO: Place this under a flag in init
+  GetPubKey(id string) (*models.PubKey, error)
+  GetUserPubKeys(userID string) ([]*models.PubKey, error)
+  CreatePubKey(u *models.PubKey) error
+  DeletePubKey(u *models.PubKey) error
+}
 
-	if err = database.AutoMigrate(&models.User{}); err != nil {
-		return err
-	}
-	if err = database.AutoMigrate(&models.PubKey{}); err != nil {
-		return err
-	}
-	if err = database.AutoMigrate(&models.Signature{}); err != nil {
-		return err
-	}
-	if err = database.AutoMigrate(&models.Package{}); err != nil {
-		return err
-	}
-	if err = database.AutoMigrate(&models.Connection{}); err != nil {
-		return err
-	}
+func Init(connector string, dsn string) db *sql.DB, err error {
+
+  switch connector{
+  case "sqlite3":
+    database, err := sql.Open(connector, dsn)
+    if err != nil {
+      return 
+    }
+    DB = database
+
+  default:
+    return errors.New(fmt.Sprintf("Don't know how to initialize a '%s' database", connector))
+    
+  }
 
 	initialized = true
-
-	DB = database
 
 	return nil
 }
 
-func GetDB() (*gorm.DB, error) {
+func GetDB() (*sql.DB, error) {
 	if !initialized {
 		return DB, errors.New("Database not initialized yet")
 	}

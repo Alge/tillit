@@ -7,7 +7,7 @@ HostName = "localhost"
 Port = 8080
 
 [ratelimit]
-RequestLimit = 100
+RequestLimit = 10
 WindowLength = 60
 
 [database]
