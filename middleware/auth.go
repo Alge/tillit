@@ -1,47 +1,42 @@
 package middleware
 
 import (
-	"encoding/base64"
-	"fmt"
-	"log"
 	"net/http"
-	"strings"
 
-	"github.com/Alge/tillit/handlers"
-	"github.com/Alge/tillit/requestdata"
+	"github.com/Alge/tillit/db"
 )
 
-func writeUnauthed(w http.ResponseWriter) {
-	w.WriteHeader(http.StatusUnauthorized)
-	w.Write([]byte(http.StatusText(http.StatusUnauthorized)))
-}
+func Auth(next http.Handler, database db.DatabaseConnector) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-func Auth(next handlers.ContextHandler, rd *requestdata.RequestData) handlers.ContextHandler {
-	return func(w http.ResponseWriter, r *http.Request, rd *requestdata.RequestData) {
-		log.Println("Running authorization")
+		/*
 
-		authorization := r.Header.Get("Authorization")
+			authorization := r.Header.Get("Authorization")
 
-		// Check that the header begins with a prefix of Bearer
-		if !strings.HasPrefix(authorization, "Bearer ") {
-			writeUnauthed(w)
-			return
-		}
+			// Check that the header begins with a prefix of Bearer
+			if !strings.HasPrefix(authorization, "Bearer ") {
+				log.Printf("Invalid auth header: '%s'", authorization)
+				writeUnauthed(w)
+				return
+			}
 
-		// Pull out the token
-		encodedToken := strings.TrimPrefix(authorization, "Bearer ")
+			// Pull out the token
+			encodedToken := strings.TrimPrefix(authorization, "Bearer ")
 
-		// Decode the token from base 64
-		token, err := base64.StdEncoding.DecodeString(encodedToken)
-		if err != nil {
-			writeUnauthed(w)
-			return
-		}
+			// Decode the token from base 64
+			token, err := base64.StdEncoding.DecodeString(encodedToken)
+			if err != nil {
+				log.Println("Failed decoding base64 header")
+				writeUnauthed(w)
+				return
+			}
 
-		// We're just assuming a valid base64 token is a valid user id.
-		userID := string(token)
-		fmt.Println("userID:", userID)
+			// We're just assuming a valid base64 token is a valid user id.
+			userID := string(token)
+			log.Println("userID:", userID)
 
-		next(w, r, rd)
-	}
+		*/
+
+		next.ServeHTTP(w, r)
+	})
 }

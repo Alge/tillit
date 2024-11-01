@@ -15,3 +15,21 @@ func (c *SqliteConnector) CreateConnection(u *models.Connection) error {
 func (c *SqliteConnector) DeleteConnection(u *models.Connection) error {
 	return nil
 }
+
+func (c *SqliteConnector) CreateConnectionTable() error {
+	stmt, err := c.Database.Prepare(`		
+		CREATE TABLE IF NOT EXISTS connections (
+			id TEXT PRIMARY KEY,
+			owner TEXT NOT NULL,
+			other TEXT NOT NULL
+		);
+	`)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = stmt.Exec()
+
+	return err
+}
