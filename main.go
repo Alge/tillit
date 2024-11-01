@@ -1,21 +1,29 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"sync"
+	"time"
 
+	"github.com/Alge/tillit/api"
 	"github.com/Alge/tillit/config"
 	"github.com/Alge/tillit/db"
-	"github.com/Alge/tillit/handlers"
-	"github.com/Alge/tillit/middleware"
-	_ "github.com/Alge/tillit/models"
 )
 
 var DB db.DatabaseConnector
 
-func main() {
+func run(ctx context.Context) error {
+
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+	defer cancel()
+
 	log.Println("Starting up")
 
 	log.Println("Loading config")
@@ -38,47 +46,48 @@ func main() {
 		}
 
 	default:
-		log.Fatal(fmt.Sprintf("Don't know how to initialize a '%s' database", conf.Database.Type))
+		log.Fatalf("Don't know how to initialize a '%s' database", conf.Database.Type)
 	}
+
+	log.Println("Done initializing database")
 
 	// Close the database when we are done
 	defer DB.Close()
 
-	router := http.NewServeMux()
+	srv := api.NewServer(conf, DB)
 
-	loggedInRouter := http.NewServeMux()
-	loggedInRouter.HandleFunc("GET /users/{userid}", handlers.GetUserID(DB))
-
-	router.Handle("/", loggedInRouter)
-
-	/*
-		rateLimiter := httprate.Limit(
-			conf.Ratelimit.RequestLimit,
-			time.Duration(conf.Ratelimit.WindowLength)*time.Second,
-			httprate.WithResponseHeaders(httprate.ResponseHeaders{
-				Limit:      "X-RateLimit-Limit",
-				Remaining:  "X-RateLimit-Remaining",
-				Reset:      "X-RateLimit-Reset",
-				RetryAfter: "Retry-After",
-				Increment:  "", // omit
-			}),
-		)
-	*/
-
-	middlewareStack, err := middleware.CreateStack(
-		middleware.Logging,
-		//rateLimiter,
-		middleware.Auth,
-	)
-
-	server := http.Server{
-		Addr:    conf.Server.HostName + ":" + strconv.Itoa(conf.Server.Port),
-		Handler: handlers.AdaptHandler(middlewareStack(router.ServeHTTP())),
+	httpServer := &http.Server{
+		Addr:    net.JoinHostPort(conf.Server.HostName, strconv.Itoa(conf.Server.Port)),
+		Handler: srv,
 	}
 
-	log.Printf("Starting up server at '%s:%d'", conf.Server.HostName, conf.Server.Port)
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal("Listen server failed with error: ", err)
-	}
+	go func() {
+		log.Printf("Starting up server at 'http://%s'", httpServer.Addr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Fprintf(os.Stderr, "error listening and serving: %s\n", err)
+		}
+	}()
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-ctx.Done()
+		shutdownCtx := context.Background()
+		shutdownCtx, cancel := context.WithTimeout(shutdownCtx, 10*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "error shutting down http server: %s\n", err)
+		}
+	}()
+	wg.Wait()
+	return nil
+}
+
+func main() {
+	ctx := context.Background()
+	if err := run(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
 }
