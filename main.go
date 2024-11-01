@@ -5,16 +5,15 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
-
-	"github.com/go-chi/httprate"
 
 	"github.com/Alge/tillit/config"
 	"github.com/Alge/tillit/db"
 	"github.com/Alge/tillit/handlers"
 	"github.com/Alge/tillit/middleware"
-	_"github.com/Alge/tillit/models"
+	_ "github.com/Alge/tillit/models"
 )
+
+var DB db.DatabaseConnector
 
 func main() {
 	log.Println("Starting up")
@@ -32,48 +31,49 @@ func main() {
 
 	switch conf.Database.Type {
 	case "sqlite":
-		if err := db.Init("sqlite3", conf.Database.DSN); err != nil {
+		if db, err := db.Init("sqlite3", conf.Database.DSN); err != nil {
 			log.Fatal("Failed initializing database: ", err)
+		} else {
+			DB = db
 		}
 
 	default:
 		log.Fatal(fmt.Sprintf("Don't know how to initialize a '%s' database", conf.Database.Type))
 	}
 
-  // Close the database when we are done
-  defer db.GetDB().Close()
-
-
-
+	// Close the database when we are done
+	defer DB.Close()
 
 	router := http.NewServeMux()
 
 	loggedInRouter := http.NewServeMux()
-	loggedInRouter.HandleFunc("GET /users/{userid}", handlers.GetUserID)
+	loggedInRouter.HandleFunc("GET /users/{userid}", handlers.GetUserID(DB))
 
 	router.Handle("/", loggedInRouter)
 
-	rateLimiter := httprate.Limit(
-		conf.Ratelimit.RequestLimit,
-		time.Duration(conf.Ratelimit.WindowLength)*time.Second,
-		httprate.WithResponseHeaders(httprate.ResponseHeaders{
-			Limit:      "X-RateLimit-Limit",
-			Remaining:  "X-RateLimit-Remaining",
-			Reset:      "X-RateLimit-Reset",
-			RetryAfter: "Retry-After",
-			Increment:  "", // omit
-		}),
-	)
+	/*
+		rateLimiter := httprate.Limit(
+			conf.Ratelimit.RequestLimit,
+			time.Duration(conf.Ratelimit.WindowLength)*time.Second,
+			httprate.WithResponseHeaders(httprate.ResponseHeaders{
+				Limit:      "X-RateLimit-Limit",
+				Remaining:  "X-RateLimit-Remaining",
+				Reset:      "X-RateLimit-Reset",
+				RetryAfter: "Retry-After",
+				Increment:  "", // omit
+			}),
+		)
+	*/
 
-	middlewareStack := middleware.CreateStack(
+	middlewareStack, err := middleware.CreateStack(
 		middleware.Logging,
-		rateLimiter,
+		//rateLimiter,
 		middleware.Auth,
 	)
 
 	server := http.Server{
 		Addr:    conf.Server.HostName + ":" + strconv.Itoa(conf.Server.Port),
-		Handler: middlewareStack(router),
+		Handler: handlers.AdaptHandler(middlewareStack(router.ServeHTTP())),
 	}
 
 	log.Printf("Starting up server at '%s:%d'", conf.Server.HostName, conf.Server.Port)

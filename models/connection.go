@@ -1,8 +1,8 @@
 package models
 
 import (
+	"fmt"
 	"time"
-  "fmt"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -20,8 +20,8 @@ type Connection struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-func (c Connection) String() string{
-  return fmt.Sprintf("Connection. User1 (owner): %s, User2 (Other): %s", c.Owner, c.OtherID)
+func (c Connection) String() string {
+	return fmt.Sprintf("Connection. User1 (owner): %s, User2 (Other): %s", c.Owner, c.OtherID)
 }
 
 func NewConnection() (*Connection, error) {

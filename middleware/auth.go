@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/Alge/tillit/handlers"
+	"github.com/Alge/tillit/requestdata"
 )
 
 func writeUnauthed(w http.ResponseWriter) {
@@ -13,8 +16,8 @@ func writeUnauthed(w http.ResponseWriter) {
 	w.Write([]byte(http.StatusText(http.StatusUnauthorized)))
 }
 
-func Auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func Auth(next handlers.ContextHandler, rd *requestdata.RequestData) handlers.ContextHandler {
+	return func(w http.ResponseWriter, r *http.Request, rd *requestdata.RequestData) {
 		log.Println("Running authorization")
 
 		authorization := r.Header.Get("Authorization")
@@ -39,7 +42,6 @@ func Auth(next http.Handler) http.Handler {
 		userID := string(token)
 		fmt.Println("userID:", userID)
 
-		next.ServeHTTP(w, r)
-
-	})
+		next(w, r, rd)
+	}
 }
