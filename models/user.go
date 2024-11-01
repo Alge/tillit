@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -14,10 +15,10 @@ type User struct {
 	Connections []Connection `json:"connections"`
 }
 
-
-func NewUser() (*User, error) {
+func NewUser(username string) (*User, error) {
 
 	u := &User{}
+	u.Username = username
 
 	if id, err := uuid.NewRandom(); err != nil {
 		return u, err
@@ -29,7 +30,7 @@ func NewUser() (*User, error) {
 }
 
 func (u User) String() string {
-  return fmt.Sprintf("User Object. ID: %s, Username: %s, Connections: %d", u.ID, u.Username, len(u.Connections))
+	return fmt.Sprintf("User Object. ID: %s, Username: %s, Connections: %d", u.ID, u.Username, len(u.Connections))
 }
 
 func (u *User) Connect(other *User, public bool, trust bool, trustExtends int) (c *Connection, err error) {
