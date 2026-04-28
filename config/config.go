@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	_ "log"
 )
 
 type (
@@ -61,6 +60,9 @@ func (cfg *Config) Validate() error {
 }
 
 func (s *server) Validate() error {
+	if len(s.HostName) == 0 {
+		return errors.New("server.HostName must not be empty")
+	}
 	if s.Port <= 0 || s.Port > 65535 {
 		return errors.New("server.Port needs to be between 1 and 65535")
 	}
@@ -94,7 +96,7 @@ func (d *database) Validate() error {
 	case "":
 		return errors.New("Database type missing")
 	default:
-		return errors.New(fmt.Sprintf("Unknown DB type: '%s'", d.Type))
+		return fmt.Errorf("unknown DB type: %q", d.Type)
 	}
 
 	if len(d.DSN) == 0 {
