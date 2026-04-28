@@ -23,7 +23,6 @@ func (err *ObjectNotFoundError) Error() string {
 	return fmt.Sprintf("No such object found: %s", err.Message)
 }
 
-func NewObjectNotFoundError(message string) (err *ObjectNotFoundError) {
-	err.Message = message
-	return
+func NewObjectNotFoundError(message string) *ObjectNotFoundError {
+	return &ObjectNotFoundError{databaseError{Message: message}}
 }
