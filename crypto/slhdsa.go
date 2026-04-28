@@ -29,6 +29,21 @@ func (s *slhDSASigner) PublicKey() []byte {
 	return b
 }
 
+func (s *slhDSASigner) PrivateKey() []byte {
+	b, _ := s.priv.MarshalBinary()
+	return b
+}
+
+func loadSLHDSASigner(privateKey []byte) (Signer, error) {
+	var priv slhdsa.PrivateKey
+	priv.ID = slhdsa.SHAKE_128s
+	if err := priv.UnmarshalBinary(privateKey); err != nil {
+		return nil, fmt.Errorf("invalid SLH-DSA private key: %w", err)
+	}
+	pub := priv.Public().(slhdsa.PublicKey)
+	return &slhDSASigner{priv: priv, pub: pub}, nil
+}
+
 func (s *slhDSASigner) Sign(message []byte) ([]byte, error) {
 	return slhdsa.SignRandomized(&s.priv, rand.Reader, slhdsa.NewMessage(message), nil)
 }

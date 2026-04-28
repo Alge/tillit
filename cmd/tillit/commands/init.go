@@ -1,0 +1,46 @@
+package commands
+
+import (
+	"encoding/base64"
+	"fmt"
+
+	"github.com/Alge/tillit/crypto"
+	"github.com/Alge/tillit/localstore"
+)
+
+func Init(args []string) error {
+	s, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	// Check if a default key already exists
+	if _, err := s.GetKey("default"); err == nil {
+		fmt.Println("tillit already initialized (key 'default' exists)")
+		return nil
+	}
+
+	signer, err := crypto.NewEd25519Signer()
+	if err != nil {
+		return fmt.Errorf("failed generating key: %w", err)
+	}
+
+	key := &localstore.Key{
+		Name:      "default",
+		Algorithm: signer.Algorithm(),
+		PubKey:    base64.RawURLEncoding.EncodeToString(signer.PublicKey()),
+		PrivKey:   base64.RawURLEncoding.EncodeToString(signer.PrivateKey()),
+	}
+	if err := s.SaveKey(key); err != nil {
+		return fmt.Errorf("failed saving key: %w", err)
+	}
+	if err := s.SetActiveKey("default"); err != nil {
+		return fmt.Errorf("failed setting active key: %w", err)
+	}
+
+	fmt.Printf("Initialized tillit\n")
+	fmt.Printf("Active key: default (%s)\n", signer.Algorithm())
+	fmt.Printf("Public key: %s\n", key.PubKey)
+	return nil
+}

@@ -6,6 +6,14 @@ import (
 	"fmt"
 )
 
+func loadEd25519Signer(privateKey []byte) (Signer, error) {
+	if len(privateKey) != ed25519.PrivateKeySize {
+		return nil, fmt.Errorf("invalid ed25519 private key length: got %d, want %d", len(privateKey), ed25519.PrivateKeySize)
+	}
+	priv := ed25519.PrivateKey(privateKey)
+	return &ed25519Signer{priv: priv, pub: priv.Public().(ed25519.PublicKey)}, nil
+}
+
 type ed25519Signer struct {
 	priv ed25519.PrivateKey
 	pub  ed25519.PublicKey
@@ -23,9 +31,8 @@ func (s *ed25519Signer) Algorithm() string {
 	return "ed25519"
 }
 
-func (s *ed25519Signer) PublicKey() []byte {
-	return []byte(s.pub)
-}
+func (s *ed25519Signer) PublicKey() []byte  { return []byte(s.pub) }
+func (s *ed25519Signer) PrivateKey() []byte { return []byte(s.priv) }
 
 func (s *ed25519Signer) Sign(message []byte) ([]byte, error) {
 	return ed25519.Sign(s.priv, message), nil

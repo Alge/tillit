@@ -99,6 +99,47 @@ func TestNewSignerUnknownAlgorithm(t *testing.T) {
 	}
 }
 
+func TestLoadSigner_Ed25519(t *testing.T) {
+	orig, _ := crypto.NewEd25519Signer()
+	privBytes := orig.PrivateKey()
+
+	loaded, err := crypto.LoadSigner("ed25519", privBytes)
+	if err != nil {
+		t.Fatalf("LoadSigner failed: %v", err)
+	}
+
+	msg := []byte("round-trip test")
+	sig, _ := orig.Sign(msg)
+	if !loaded.Verify(msg, sig) {
+		t.Error("loaded signer failed to verify signature from original")
+	}
+	// loaded signer should produce verifiable signatures too
+	sig2, _ := loaded.Sign(msg)
+	if !orig.Verify(msg, sig2) {
+		t.Error("original signer failed to verify signature from loaded signer")
+	}
+}
+
+func TestLoadSigner_SLHDSA(t *testing.T) {
+	orig, _ := crypto.NewSLHDSASigner()
+	loaded, err := crypto.LoadSigner("slh-dsa-shake-128s", orig.PrivateKey())
+	if err != nil {
+		t.Fatalf("LoadSigner failed: %v", err)
+	}
+	msg := []byte("round-trip test")
+	sig, _ := orig.Sign(msg)
+	if !loaded.Verify(msg, sig) {
+		t.Error("loaded SLH-DSA signer failed to verify")
+	}
+}
+
+func TestLoadSigner_Unknown(t *testing.T) {
+	_, err := crypto.LoadSigner("rsa-2048", []byte("key"))
+	if err == nil {
+		t.Error("expected error for unknown algorithm")
+	}
+}
+
 func TestLoadSignerFromPublicKey(t *testing.T) {
 	s, _ := crypto.NewEd25519Signer()
 	pub := s.PublicKey()
