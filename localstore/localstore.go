@@ -48,7 +48,10 @@ func (s *Store) migrate() error {
 			key   TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);`)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.migratePeers()
 }
 
 func (s *Store) SaveKey(k *Key) error {
