@@ -17,6 +17,7 @@ Tillit is built around a decentralized web-of-trust model:
 - **Diff chaining**: Vetting decisions can cover a full version, a version range, or a diff between two specific versions (pinned by content hash). Trust chains can be built from these: if Lisa vetted `3.4` and Bob (trusted by you) reviewed `diff(3.4 → 3.5)`, you transitively trust `3.5`. The algorithm walks the diff chain from the last known-trusted version, stopping at the first gap or untrusted reviewer. Diff chain trust follows the same rules as people trust — no special cases.
 - **Package hashing**: When signing, the CLI automatically fetches the package from the appropriate registry and computes the content hash. The adapter for each ecosystem is responsible for fetching and hashing.
 - **Vetting aggregation**: When multiple trusted peers have signed the same package, the highest decision level wins. The query and check output also shows how many peers in the trust graph have vetted each package — more vettings increases confidence.
+- **Contextual transitive allowance**: Vetting or allowing a package implicitly grants **Allowed** status to all of its pinned dependencies, but only when that package is present in the dependency tree. If a dependency appears independently (not pulled in by a vetted package), it requires its own explicit decision. This requires the lock file adapter to provide the full dependency tree, not just a flat package list.
 - **Conflict resolution**: Signatures are ordered by the server-assigned upload timestamp. Changing a decision requires explicitly revoking the original — uploading a conflicting decision alone is not sufficient. Rejections always take precedence over approvals regardless of ordering, for safety.
 - **Decision levels**: Signatures have three levels of assurance, in ascending order of strength:
   - **Allowed** — approved for use by policy, no security review implied. Useful for organisations to define what dependencies are permitted without vouching for their safety.
@@ -99,7 +100,8 @@ This is not yet useful
 - [ ] `query <ecosystem> <package>`: show trusted version ranges and vetting counts
 
 ### Ecosystem Adapters
-- [ ] Implement adapter interface (package ID, content hash, version range comparison, registry fetch)
+- [ ] Implement adapter interface (package ID, content hash, version range comparison, registry fetch, dependency tree parsing)
+- [ ] Adapters must expose the full dependency tree (which package pulled in which dependency), not just a flat list — required for contextual transitive allowance
 - [ ] Adapters for: Go, pip, uv, npm
 
 ### Core
