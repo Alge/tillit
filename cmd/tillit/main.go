@@ -40,6 +40,8 @@ func main() {
 		err = commands.Sync(args)
 	case "publish":
 		err = commands.Publish(args)
+	case "status":
+		err = commands.Status(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -71,5 +73,6 @@ commands:
                               sign and publish a vetting decision
   revoke <signature_id>       revoke a previously published decision
   sync                        pull signatures from all trusted peers into local cache
-  publish                     push any locally-cached signatures to registered servers`)
+  publish                     push any locally-cached signatures to registered servers
+  status                      show pending pushes and last-sync time per registered server`)
 }

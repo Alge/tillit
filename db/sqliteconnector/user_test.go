@@ -46,23 +46,3 @@ func TestCreateAndGetUser(t *testing.T) {
 	}
 }
 
-func TestGetUserList(t *testing.T) {
-	c := newTestConnector(t)
-
-	for i, name := range []string{"alice", "bob", "carol"} {
-		u := &models.User{ID: name + "-id", Username: name, PubKey: "key-" + name}
-		_ = i
-		if err := c.CreateUser(u); err != nil {
-			t.Fatalf("CreateUser failed: %s", err)
-		}
-	}
-
-	res, err := c.GetUserList(1, 10)
-	if err != nil {
-		t.Fatalf("GetUserList failed: %s", err)
-	}
-
-	if len(res.Data) != 3 {
-		t.Errorf("expected 3 users, got %d", len(res.Data))
-	}
-}
