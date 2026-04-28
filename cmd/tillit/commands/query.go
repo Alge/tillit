@@ -31,46 +31,30 @@ func Query(args []string) error {
 		return fmt.Errorf("resolve package: %w", err)
 	}
 
-	if len(pv.Versions) == 0 {
+	if len(pv.Spans) == 0 {
 		fmt.Printf("No trusted decisions about %s/%s.\n", ecosystem, packageID)
 		fmt.Println("Try 'tillit sync' to fetch fresh data from your peers.")
 		return nil
 	}
 
-	versions := make([]string, 0, len(pv.Versions))
-	for v := range pv.Versions {
-		versions = append(versions, v)
-	}
-	cmp := versionComparatorFor(ecosystem)
-	sort.Slice(versions, func(i, j int) bool {
-		return cmp(versions[i], versions[j]) < 0
-	})
-
 	fmt.Printf("Versions for %s/%s:\n", ecosystem, packageID)
-	for _, v := range versions {
-		ver := pv.Versions[v]
-		fmt.Printf("  %-22s %s%s\n", v, ver.Status, decisionSummary(ver))
+	for _, span := range pv.Spans {
+		label := span.From
+		if span.From != span.To {
+			label = span.From + " — " + span.To
+		}
+		fmt.Printf("  %-22s %s%s\n", label, span.Status, decisionsSummary(span.Decisions))
 	}
 	return nil
 }
 
-// versionComparatorFor returns the comparison function from the ecosystem's
-// adapter, falling back to the resolver's generic comparator when no
-// adapter is registered.
-func versionComparatorFor(ecosystem string) func(a, b string) int {
-	if a, ok := adapterForEcosystem(ecosystem); ok {
-		return a.CompareVersions
-	}
-	return resolver.CompareVersions
-}
-
-// decisionSummary returns a short suffix listing the signers (and reasons,
+// decisionsSummary returns a short suffix listing the signers (and reasons,
 // when present) behind the verdict — enough context to understand why
 // without dumping the full structure.
-func decisionSummary(v resolver.Verdict) string {
+func decisionsSummary(ds []resolver.ContributingDecision) string {
 	signers := map[string]bool{}
 	var reasons []string
-	for _, d := range v.Decisions {
+	for _, d := range ds {
 		signers[d.SignerID] = true
 		if d.Reason != "" {
 			reasons = append(reasons, d.Reason)
