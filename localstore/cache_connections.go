@@ -1,6 +1,8 @@
 package localstore
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -8,6 +10,7 @@ import (
 type CachedConnection struct {
 	ID        string
 	Signer    string
+	OtherID   string
 	Payload   string
 	Algorithm string
 	Sig       string
@@ -22,6 +25,7 @@ func (s *Store) migrateCachedConnections() error {
 		CREATE TABLE IF NOT EXISTS cached_connections (
 			id          TEXT PRIMARY KEY,
 			signer      TEXT NOT NULL,
+			other_id    TEXT NOT NULL DEFAULT '',
 			payload     TEXT NOT NULL,
 			algorithm   TEXT NOT NULL,
 			sig         TEXT NOT NULL,
@@ -41,12 +45,12 @@ func (s *Store) SaveCachedConnection(c *CachedConnection) error {
 	}
 	_, err := s.db.Exec(`
 		INSERT INTO cached_connections
-			(id, signer, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			payload=excluded.payload, revoked=excluded.revoked,
 			revoked_at=excluded.revoked_at, fetched_at=excluded.fetched_at`,
-		c.ID, c.Signer, c.Payload, c.Algorithm, c.Sig,
+		c.ID, c.Signer, c.OtherID, c.Payload, c.Algorithm, c.Sig,
 		c.CreatedAt.UTC().Format(time.RFC3339),
 		c.Revoked, revokedAt,
 		c.FetchedAt.UTC().Format(time.RFC3339),
@@ -56,13 +60,31 @@ func (s *Store) SaveCachedConnection(c *CachedConnection) error {
 
 func (s *Store) GetCachedConnection(id string) (*CachedConnection, error) {
 	return scanCachedConnection(s.db.QueryRow(
-		`SELECT id, signer, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at
+		`SELECT id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at
 		 FROM cached_connections WHERE id = ?`, id))
+}
+
+// GetActiveConnection returns the most recent non-revoked connection from
+// signer to other, or (nil, nil) if none exists.
+func (s *Store) GetActiveConnection(signer, other string) (*CachedConnection, error) {
+	row := s.db.QueryRow(
+		`SELECT id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at
+		 FROM cached_connections
+		 WHERE signer = ? AND other_id = ? AND revoked = 0
+		 ORDER BY created_at DESC LIMIT 1`, signer, other)
+	c, err := scanCachedConnection(row)
+	if err != nil {
+		if err.Error() == "cached connection not found" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return c, nil
 }
 
 func (s *Store) GetCachedConnectionsBySigner(signerID string) ([]*CachedConnection, error) {
 	rows, err := s.db.Query(
-		`SELECT id, signer, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at
+		`SELECT id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at
 		 FROM cached_connections WHERE signer = ? ORDER BY created_at ASC`, signerID)
 	if err != nil {
 		return nil, err
@@ -86,11 +108,14 @@ func scanCachedConnection(row scanner) (*CachedConnection, error) {
 	c := &CachedConnection{}
 
 	err := row.Scan(
-		&c.ID, &c.Signer, &c.Payload, &c.Algorithm, &c.Sig,
+		&c.ID, &c.Signer, &c.OtherID, &c.Payload, &c.Algorithm, &c.Sig,
 		&createdAtStr, &c.Revoked, &revokedAtStr, &fetchedAtStr,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("cached connection not found: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("cached connection not found")
+		}
+		return nil, err
 	}
 
 	c.CreatedAt, err = time.Parse(time.RFC3339, createdAtStr)

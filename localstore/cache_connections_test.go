@@ -14,6 +14,7 @@ func TestSaveAndGetCachedConnection(t *testing.T) {
 	c := &localstore.CachedConnection{
 		ID:        "conn-1",
 		Signer:    "user-a",
+		OtherID:   "user-b",
 		Payload:   `{"type":"connection","other_id":"user-b","trust":true}`,
 		Algorithm: "ed25519",
 		Sig:       "base64sig",
@@ -68,6 +69,63 @@ func TestGetCachedConnectionsBySigner(t *testing.T) {
 	}
 	if len(conns) != 2 {
 		t.Errorf("expected 2 connections for alice, got %d", len(conns))
+	}
+}
+
+func TestGetActiveConnection(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// No active connection yet.
+	got, err := s.GetActiveConnection("alice", "bob")
+	if err != nil {
+		t.Fatalf("GetActiveConnection failed: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil active connection, got %+v", got)
+	}
+
+	// Insert one — it should now be the active.
+	c1 := &localstore.CachedConnection{
+		ID: "c-1", Signer: "alice", OtherID: "bob", Payload: "{}",
+		Algorithm: "ed25519", Sig: "x",
+		CreatedAt: now, FetchedAt: now,
+	}
+	if err := s.SaveCachedConnection(c1); err != nil {
+		t.Fatalf("SaveCachedConnection failed: %v", err)
+	}
+	got, err = s.GetActiveConnection("alice", "bob")
+	if err != nil || got == nil || got.ID != "c-1" {
+		t.Fatalf("expected c-1, got %v err=%v", got, err)
+	}
+
+	// A revoked one shouldn't be returned even if it's the only one.
+	revokedAt := now.Add(time.Minute)
+	c1.Revoked = true
+	c1.RevokedAt = &revokedAt
+	if err := s.SaveCachedConnection(c1); err != nil {
+		t.Fatalf("re-save failed: %v", err)
+	}
+	got, err = s.GetActiveConnection("alice", "bob")
+	if err != nil {
+		t.Fatalf("GetActiveConnection failed: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil after revocation, got %+v", got)
+	}
+
+	// A new active one should be returned.
+	c2 := &localstore.CachedConnection{
+		ID: "c-2", Signer: "alice", OtherID: "bob", Payload: "{}",
+		Algorithm: "ed25519", Sig: "x",
+		CreatedAt: now.Add(2 * time.Minute), FetchedAt: now,
+	}
+	if err := s.SaveCachedConnection(c2); err != nil {
+		t.Fatalf("SaveCachedConnection failed: %v", err)
+	}
+	got, err = s.GetActiveConnection("alice", "bob")
+	if err != nil || got == nil || got.ID != "c-2" {
+		t.Fatalf("expected c-2, got %v err=%v", got, err)
 	}
 }
 
