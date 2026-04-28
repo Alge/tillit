@@ -110,6 +110,70 @@ func TestPayload_Validate_RevocationMissingTarget(t *testing.T) {
 	}
 }
 
+func TestParsePayload_Connection(t *testing.T) {
+	raw := `{
+		"type": "connection",
+		"signer": "abc123",
+		"other_id": "def456",
+		"public": true,
+		"trust": true,
+		"trust_extends": 2
+	}`
+	p, err := models.ParsePayload([]byte(raw))
+	if err != nil {
+		t.Fatalf("ParsePayload failed: %v", err)
+	}
+	if p.Type != models.PayloadTypeConnection {
+		t.Errorf("Type = %q, want %q", p.Type, models.PayloadTypeConnection)
+	}
+	if p.OtherID != "def456" {
+		t.Errorf("OtherID = %q", p.OtherID)
+	}
+	if !p.Public || !p.Trust {
+		t.Error("expected Public and Trust to be true")
+	}
+	if p.TrustExtends != 2 {
+		t.Errorf("TrustExtends = %d, want 2", p.TrustExtends)
+	}
+}
+
+func TestPayload_Validate_Connection(t *testing.T) {
+	p := &models.Payload{
+		Type:    models.PayloadTypeConnection,
+		Signer:  "abc123",
+		OtherID: "def456",
+		Trust:   true,
+	}
+	if err := p.Validate(); err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestPayload_Validate_ConnectionMissingOther(t *testing.T) {
+	p := &models.Payload{Type: models.PayloadTypeConnection, Signer: "abc123"}
+	if err := p.Validate(); err == nil {
+		t.Error("expected error for connection payload missing other_id")
+	}
+}
+
+func TestPayload_Validate_ConnectionRevocation(t *testing.T) {
+	p := &models.Payload{
+		Type:     models.PayloadTypeConnectionRevocation,
+		Signer:   "abc123",
+		TargetID: "conn-uuid-1",
+	}
+	if err := p.Validate(); err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestPayload_Validate_ConnectionRevocationMissingTarget(t *testing.T) {
+	p := &models.Payload{Type: models.PayloadTypeConnectionRevocation, Signer: "abc123"}
+	if err := p.Validate(); err == nil {
+		t.Error("expected error for connection_revocation missing target_id")
+	}
+}
+
 func TestPayload_RoundTrip(t *testing.T) {
 	p := &models.Payload{
 		Type:      models.PayloadTypeDecision,
