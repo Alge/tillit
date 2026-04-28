@@ -47,7 +47,13 @@ func (r *Resolver) buildTrustSet(viewer string) (map[string]trustEntry, error) {
 		}
 	}
 
+	// The viewer is always implicitly trusted by themselves: their own
+	// signatures count, with an empty path. (Skipped when viewer is empty,
+	// e.g. before any active key is set.)
 	result := map[string]trustEntry{}
+	if viewer != "" {
+		result[viewer] = trustEntry{Path: []string{}, VetoOnly: false}
+	}
 	queue := []frontier{}
 
 	// Seed from direct edges.

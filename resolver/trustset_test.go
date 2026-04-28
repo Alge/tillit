@@ -192,6 +192,26 @@ func TestBuildTrustSet_NonActiveViewer(t *testing.T) {
 	}
 }
 
+func TestBuildTrustSet_ViewerIsAlwaysTrusted(t *testing.T) {
+	s := newTestStore(t)
+	// No peers, no connections — but viewer should still trust themselves.
+	r := New(s, "me")
+	got, err := r.buildTrustSet("me")
+	if err != nil {
+		t.Fatalf("buildTrustSet: %v", err)
+	}
+	entry, ok := got["me"]
+	if !ok {
+		t.Fatalf("expected viewer to trust self, got: %+v", got)
+	}
+	if entry.VetoOnly {
+		t.Error("self-trust must not be veto-only")
+	}
+	if len(entry.Path) != 0 {
+		t.Errorf("self-trust path should be empty, got %v", entry.Path)
+	}
+}
+
 func TestBuildTrustSet_RevokedConnectionIgnored(t *testing.T) {
 	s := newTestStore(t)
 	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 2})

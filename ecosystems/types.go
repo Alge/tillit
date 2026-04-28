@@ -65,4 +65,12 @@ type Adapter interface {
 	// needs) from the filesystem and returns the canonical package list
 	// plus any non-fatal warnings.
 	Parse(fsys fs.FS, lockfilePath string) (ParseResult, error)
+
+	// CompareVersions orders two version strings using this ecosystem's
+	// version semantics (Go semver, PEP 440, npm semver, etc.). Returns
+	// -1, 0, or 1 if a is less than, equal to, or greater than b.
+	// Adapters serving the same ecosystem must agree on the comparison
+	// rule. Used by the resolver for output ordering and by sign-diff
+	// to verify that FromVersion precedes ToVersion.
+	CompareVersions(a, b string) int
 }

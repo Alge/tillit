@@ -32,6 +32,12 @@ func (GoSum) CanParse(p string) bool {
 	return filepath.Base(p) == "go.sum"
 }
 
+// CompareVersions orders Go module versions per the semver-with-pseudo
+// conventions used by the Go toolchain.
+func (GoSum) CompareVersions(a, b string) int {
+	return compareGoVersion(a, b)
+}
+
 // Parse reads go.sum (required) and go.mod (optional, sibling file) from
 // fsys. It returns one PackageRef per (module, version) pair from go.sum,
 // with Direct=true for modules listed without `// indirect` in go.mod.
