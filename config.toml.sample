@@ -1,16 +1,11 @@
-
-[jwt]
-Secret = "replacethiswithsomethingsupersecret"
-
 [server]
 HostName = "localhost"
 Port = 8080
 
 [ratelimit]
-RequestLimit = 10
+RequestLimit = 100
 WindowLength = 60
 
 [database]
 Type = "sqlite"
 DSN = "tillit.db.sqlite3"
-
