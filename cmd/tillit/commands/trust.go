@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	tillit_crypto "github.com/Alge/tillit/crypto"
 	"github.com/Alge/tillit/localstore"
+	"github.com/Alge/tillit/models"
 )
 
 // parsePeer splits "userID@https://server.example.com" into (id, serverURL).
@@ -58,7 +61,12 @@ func Trust(args []string) error {
 	}
 	defer s.Close()
 
-	if err := s.SavePeer(&localstore.Peer{
+	signer, userID, err := activeSignerAndID(s)
+	if err != nil {
+		return err
+	}
+
+	if err := recordTrustChange(s, signer, userID, &localstore.Peer{
 		ID:         id,
 		ServerURL:  serverURL,
 		TrustDepth: depth,
@@ -66,7 +74,7 @@ func Trust(args []string) error {
 		Distrusted: false,
 		VetoOnly:   vetoOnly,
 	}); err != nil {
-		return fmt.Errorf("failed saving peer: %w", err)
+		return err
 	}
 
 	fmt.Printf("Trusting %s@%s (depth=%d", id, serverURL, depth)
@@ -77,6 +85,88 @@ func Trust(args []string) error {
 		fmt.Print(", veto-only")
 	}
 	fmt.Println(")")
+	return nil
+}
+
+// recordTrustChange revokes any existing active connection from userID to
+// peer.ID and writes a fresh signed connection payload reflecting the new
+// trust parameters. The peer record is also upserted.
+func recordTrustChange(s *localstore.Store, signer tillit_crypto.Signer, userID string, peer *localstore.Peer) error {
+	now := time.Now().UTC()
+
+	if err := revokeActiveConnection(s, signer, userID, peer.ID, now); err != nil {
+		return err
+	}
+
+	connPayload := &models.Payload{
+		Type:         models.PayloadTypeConnection,
+		Signer:       userID,
+		OtherID:      peer.ID,
+		Public:       peer.Public,
+		Trust:        !peer.Distrusted && !peer.VetoOnly,
+		TrustExtends: peer.TrustDepth,
+	}
+	signed, err := signPayload(signer, connPayload)
+	if err != nil {
+		return err
+	}
+	if err := s.SaveCachedConnection(&localstore.CachedConnection{
+		ID:        signed.ID,
+		Signer:    userID,
+		OtherID:   peer.ID,
+		Payload:   signed.Payload,
+		Algorithm: signed.Algorithm,
+		Sig:       signed.Sig,
+		CreatedAt: now,
+		FetchedAt: now,
+	}); err != nil {
+		return fmt.Errorf("failed saving connection: %w", err)
+	}
+
+	if err := s.SavePeer(peer); err != nil {
+		return fmt.Errorf("failed saving peer: %w", err)
+	}
+	return nil
+}
+
+func revokeActiveConnection(s *localstore.Store, signer tillit_crypto.Signer, userID, otherID string, now time.Time) error {
+	existing, err := s.GetActiveConnection(userID, otherID)
+	if err != nil {
+		return fmt.Errorf("failed checking existing connection: %w", err)
+	}
+	if existing == nil {
+		return nil
+	}
+
+	revPayload := &models.Payload{
+		Type:     models.PayloadTypeConnectionRevocation,
+		Signer:   userID,
+		TargetID: existing.ID,
+	}
+	signed, err := signPayload(signer, revPayload)
+	if err != nil {
+		return err
+	}
+	revokedAt := now
+	if err := s.SaveCachedConnection(&localstore.CachedConnection{
+		ID:        signed.ID,
+		Signer:    userID,
+		OtherID:   otherID,
+		Payload:   signed.Payload,
+		Algorithm: signed.Algorithm,
+		Sig:       signed.Sig,
+		CreatedAt: now,
+		FetchedAt: now,
+	}); err != nil {
+		return fmt.Errorf("failed saving revocation: %w", err)
+	}
+
+	// Mark the superseded connection as revoked locally too.
+	existing.Revoked = true
+	existing.RevokedAt = &revokedAt
+	if err := s.SaveCachedConnection(existing); err != nil {
+		return fmt.Errorf("failed marking superseded connection as revoked: %w", err)
+	}
 	return nil
 }
 
@@ -96,12 +186,20 @@ func Distrust(args []string) error {
 	}
 	defer s.Close()
 
-	if err := s.SavePeer(&localstore.Peer{
+	signer, userID, err := activeSignerAndID(s)
+	if err != nil {
+		return err
+	}
+
+	// Distrust is a local concept — we don't expose it on the server, but
+	// we do revoke any previously-published trust connection so peers stop
+	// inheriting from this person via us.
+	if err := recordTrustChange(s, signer, userID, &localstore.Peer{
 		ID:         id,
 		ServerURL:  serverURL,
 		Distrusted: true,
 	}); err != nil {
-		return fmt.Errorf("failed saving peer: %w", err)
+		return err
 	}
 
 	fmt.Printf("Distrusting %s@%s\n", id, serverURL)
@@ -123,6 +221,16 @@ func Untrust(args []string) error {
 		return err
 	}
 	defer s.Close()
+
+	signer, userID, err := activeSignerAndID(s)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	if err := revokeActiveConnection(s, signer, userID, id, now); err != nil {
+		return err
+	}
 
 	if err := s.RemovePeer(id); err != nil {
 		return fmt.Errorf("failed removing peer: %w", err)
