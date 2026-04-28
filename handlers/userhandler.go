@@ -38,7 +38,7 @@ func CreateUserHandler(database db.DatabaseConnector) func(w http.ResponseWriter
 				fmt.Fprintf(w, "Invalid pulic key: %s", err)
 				return
 			}
-			log.Printf("Pubkey: %s", key)
+			log.Printf("Pubkey: %v", key)
 
 			// Store the user in the database
 			err = database.CreateUser(u)

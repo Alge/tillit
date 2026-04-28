@@ -17,7 +17,7 @@ func HandleHealth() func(w http.ResponseWriter, r *http.Request) {
 
 			err := encode(w, r, 200, s)
 			if err != nil {
-				log.Printf("Failed encoding and returning healthResponse %w", err)
+				log.Printf("Failed encoding and returning healthResponse %v", err)
 			}
 		},
 	)

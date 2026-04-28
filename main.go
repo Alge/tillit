@@ -39,10 +39,10 @@ func run(ctx context.Context) error {
 
 	switch conf.Database.Type {
 	case "sqlite":
-		if db, err := db.Init("sqlite3", conf.Database.DSN); err != nil {
+		if dbConn, err := db.Init("sqlite3", conf.Database.DSN); err != nil {
 			log.Fatal("Failed initializing database: ", err)
 		} else {
-			DB = db
+			DB = dbConn
 		}
 
 	default:
