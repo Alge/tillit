@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Alge/tillit/localstore"
+	"github.com/Alge/tillit/models"
 )
 
 func Sync(args []string) error {
@@ -85,25 +86,26 @@ func Publish(args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed reading local cache: %w", err)
 	}
-	if len(cachedSigs) == 0 {
+	cachedConns, err := s.GetCachedConnectionsBySigner(userID)
+	if err != nil {
+		return fmt.Errorf("failed reading cached connections: %w", err)
+	}
+
+	if len(cachedSigs) == 0 && len(cachedConns) == 0 {
 		fmt.Println("Nothing to publish.")
 		return nil
 	}
 
+	now := time.Now().UTC()
 	for _, srv := range servers {
-		existing, err := fetchUserSignatures(srv.URL, userID, nil)
-		if err != nil {
-			fmt.Printf("  [%s] failed fetching existing signatures: %v\n", srv.URL, err)
-			continue
-		}
-		existingIDs := make(map[string]bool, len(existing))
-		for _, e := range existing {
-			existingIDs[e.ID] = true
-		}
-
-		pushed := 0
+		sigsPushed := 0
 		for _, cached := range cachedSigs {
-			if existingIDs[cached.ID] {
+			pushed, err := s.IsPushed(cached.ID, localstore.ItemSignature, srv.URL)
+			if err != nil {
+				fmt.Printf("  [%s] push-state read failed: %v\n", srv.URL, err)
+				continue
+			}
+			if pushed {
 				continue
 			}
 			req := sigUploadRequest{
@@ -112,12 +114,66 @@ func Publish(args []string) error {
 				Sig:       cached.Sig,
 			}
 			if _, err := uploadSignature(srv.URL, userID, req); err != nil {
-				fmt.Printf("  [%s] push failed for %s: %v\n", srv.URL, cached.ID, err)
+				fmt.Printf("  [%s] signature push failed for %s: %v\n", srv.URL, cached.ID, err)
 				continue
 			}
-			pushed++
+			if err := s.RecordPush(cached.ID, localstore.ItemSignature, srv.URL, now); err != nil {
+				fmt.Printf("  [%s] warning: failed recording push: %v\n", srv.URL, err)
+			}
+			sigsPushed++
 		}
-		fmt.Printf("Pushed %d new signatures to %s\n", pushed, srv.URL)
+
+		connsPushed := 0
+		for _, cached := range cachedConns {
+			// Only push connections marked public (or revocations of any
+			// connection — server-side revoke uses target_id from payload).
+			if !connectionShouldBePushed(cached) {
+				continue
+			}
+			pushed, err := s.IsPushed(cached.ID, localstore.ItemConnection, srv.URL)
+			if err != nil {
+				fmt.Printf("  [%s] push-state read failed: %v\n", srv.URL, err)
+				continue
+			}
+			if pushed {
+				continue
+			}
+			req := connUploadRequest{
+				ID:        cached.ID,
+				Payload:   cached.Payload,
+				Algorithm: cached.Algorithm,
+				Sig:       cached.Sig,
+			}
+			if err := uploadConnection(srv.URL, userID, req); err != nil {
+				fmt.Printf("  [%s] connection push failed for %s: %v\n", srv.URL, cached.ID, err)
+				continue
+			}
+			if err := s.RecordPush(cached.ID, localstore.ItemConnection, srv.URL, now); err != nil {
+				fmt.Printf("  [%s] warning: failed recording push: %v\n", srv.URL, err)
+			}
+			connsPushed++
+		}
+
+		fmt.Printf("Pushed %d signature(s) and %d connection(s) to %s\n",
+			sigsPushed, connsPushed, srv.URL)
 	}
 	return nil
+}
+
+// connectionShouldBePushed decides whether a cached connection record
+// should be uploaded to a server. Public connections and any revocation
+// payload (regardless of whether the original was public) get pushed;
+// private connections stay local.
+func connectionShouldBePushed(c *localstore.CachedConnection) bool {
+	p, err := models.ParsePayload([]byte(c.Payload))
+	if err != nil {
+		return false
+	}
+	if p.Type == models.PayloadTypeConnectionRevocation {
+		return true
+	}
+	if p.Type == models.PayloadTypeConnection {
+		return p.Public
+	}
+	return false
 }

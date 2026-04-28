@@ -16,6 +16,57 @@ type sigUploadRequest struct {
 	Sig       string `json:"sig"`
 }
 
+type connUploadRequest struct {
+	ID        string `json:"id"`
+	Payload   string `json:"payload"`
+	Algorithm string `json:"algorithm"`
+	Sig       string `json:"sig"`
+}
+
+// uploadConnection POSTs a signed connection or connection_revocation payload.
+// It returns nil error on 201 (connection) or 204 (revocation).
+func uploadConnection(serverURL, userID string, req connUploadRequest) error {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+	resp, err := http.Post(
+		fmt.Sprintf("%s/v1/users/%s/connections", serverURL, userID),
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("server returned %s", resp.Status)
+	}
+	return nil
+}
+
+func fetchUserConnections(serverURL, userID string, since *time.Time) ([]*models.Connection, error) {
+	url := fmt.Sprintf("%s/v1/users/%s/connections", serverURL, userID)
+	if since != nil {
+		url += "?since=" + since.UTC().Format(time.RFC3339)
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned %s", resp.Status)
+	}
+	var conns []*models.Connection
+	if err := json.NewDecoder(resp.Body).Decode(&conns); err != nil {
+		return nil, fmt.Errorf("failed decoding response: %w", err)
+	}
+	return conns, nil
+}
+
 func uploadSignature(serverURL, userID string, req sigUploadRequest) (*models.Signature, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
