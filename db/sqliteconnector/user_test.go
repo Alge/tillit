@@ -25,10 +25,11 @@ func TestCreateAndGetUser(t *testing.T) {
 	c := newTestConnector(t)
 
 	u := &models.User{
-		ID:       "test-id",
-		Username: "alice",
-		PubKey:   "test-pubkey",
-		IsAdmin:  false,
+		ID:        "test-id",
+		Username:  "alice",
+		PubKey:    "test-pubkey",
+		Algorithm: "ed25519",
+		IsAdmin:   false,
 	}
 
 	if err := c.CreateUser(u); err != nil {
@@ -40,7 +41,7 @@ func TestCreateAndGetUser(t *testing.T) {
 		t.Fatalf("GetUser failed: %s", err)
 	}
 
-	if got.ID != u.ID || got.Username != u.Username || got.PubKey != u.PubKey {
+	if got.ID != u.ID || got.Username != u.Username || got.PubKey != u.PubKey || got.Algorithm != u.Algorithm {
 		t.Errorf("got %+v, want %+v", got, u)
 	}
 }

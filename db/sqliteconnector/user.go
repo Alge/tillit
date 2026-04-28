@@ -12,14 +12,14 @@ import (
 
 
 func (c *SqliteConnector) GetUser(id string) (*models.User, error) {
-	stmt, err := c.Database.Prepare("SELECT id, username, pubkey FROM users WHERE id = ?")
+	stmt, err := c.Database.Prepare("SELECT id, username, pubkey, algorithm FROM users WHERE id = ?")
 	if err != nil {
 		return nil, fmt.Errorf("failed preparing statement: %w", err)
 	}
 	defer stmt.Close()
 
 	u := &models.User{}
-	err = stmt.QueryRow(id).Scan(&u.ID, &u.Username, &u.PubKey)
+	err = stmt.QueryRow(id).Scan(&u.ID, &u.Username, &u.PubKey, &u.Algorithm)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, dberrors.NewObjectNotFoundError("No such user")
@@ -30,7 +30,7 @@ func (c *SqliteConnector) GetUser(id string) (*models.User, error) {
 }
 
 func (c *SqliteConnector) GetUserList(page int, size int) (*responsetypes.PaginatedResponse[*models.User], error) {
-	stmt, err := c.Database.Prepare("SELECT id, username, pubkey FROM users LIMIT ? OFFSET ?")
+	stmt, err := c.Database.Prepare("SELECT id, username, pubkey, algorithm FROM users LIMIT ? OFFSET ?")
 	if err != nil {
 		return nil, fmt.Errorf("failed preparing statement: %w", err)
 	}
@@ -49,7 +49,7 @@ func (c *SqliteConnector) GetUserList(page int, size int) (*responsetypes.Pagina
 
 	for rows.Next() {
 		u := &models.User{}
-		if err := rows.Scan(&u.ID, &u.Username, &u.PubKey); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.PubKey, &u.Algorithm); err != nil {
 			return nil, fmt.Errorf("failed scanning user row: %w", err)
 		}
 		res.Data = append(res.Data, u)
@@ -60,13 +60,13 @@ func (c *SqliteConnector) GetUserList(page int, size int) (*responsetypes.Pagina
 }
 
 func (c *SqliteConnector) CreateUser(u *models.User) error {
-	stmt, err := c.Database.Prepare(`INSERT INTO users (id, username, pubkey, is_admin) VALUES (?, ?, ?, ?)`)
+	stmt, err := c.Database.Prepare(`INSERT INTO users (id, username, pubkey, algorithm, is_admin) VALUES (?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(u.ID, u.Username, u.PubKey, u.IsAdmin)
+	_, err = stmt.Exec(u.ID, u.Username, u.PubKey, u.Algorithm, u.IsAdmin)
 	return err
 }
 func (c *SqliteConnector) DeleteUser(u *models.User) error {
@@ -74,14 +74,14 @@ func (c *SqliteConnector) DeleteUser(u *models.User) error {
 }
 
 func (c *SqliteConnector) CreateUserTable() error {
-	stmt, err := c.Database.Prepare(`		
+	stmt, err := c.Database.Prepare(`
 		CREATE TABLE IF NOT EXISTS users (
-			id TEXT PRIMARY KEY,
-			username TEXT NOT NULL UNIQUE,
-			pubkey TEXT NOT NULL UNIQUE,
-			is_admin INTEGER DEFAULT 0
-		);
-	`)
+			id        TEXT PRIMARY KEY,
+			username  TEXT NOT NULL UNIQUE,
+			pubkey    TEXT NOT NULL UNIQUE,
+			algorithm TEXT NOT NULL DEFAULT '',
+			is_admin  INTEGER DEFAULT 0
+		);`)
 
 	if err != nil {
 		return err
