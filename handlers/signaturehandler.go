@@ -13,6 +13,12 @@ import (
 	"github.com/google/uuid"
 )
 
+func processRevocation(database db.DatabaseConnector, payload *models.Payload, uploadedAt time.Time) {
+	if err := database.RevokeSignature(payload.TargetID, uploadedAt); err != nil {
+		log.Printf("RevokeSignature(%s) failed: %v", payload.TargetID, err)
+	}
+}
+
 func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.PathValue("id")
@@ -58,18 +64,24 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 			return
 		}
 
+		uploadedAt := time.Now().UTC()
 		sig := &models.Signature{
 			ID:         uuid.NewString(),
 			Signer:     userID,
 			Payload:    input.Payload,
 			Algorithm:  input.Algorithm,
 			Sig:        input.Sig,
-			UploadedAt: time.Now().UTC(),
+			UploadedAt: uploadedAt,
 		}
 		if err := database.CreateSignature(sig); err != nil {
 			log.Printf("CreateSignature failed: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
+		}
+
+		payload, err := models.ParsePayload([]byte(input.Payload))
+		if err == nil && payload.IsRevocation() {
+			processRevocation(database, payload, uploadedAt)
 		}
 
 		encode(w, r, http.StatusCreated, sig)

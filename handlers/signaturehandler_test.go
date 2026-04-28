@@ -200,3 +200,50 @@ func TestGetUserSignaturesHandler_Since(t *testing.T) {
 		t.Errorf("expected 1 signature after cutoff, got %d", len(sigs))
 	}
 }
+
+func uploadDecision(t *testing.T, db *sqliteconnector.SqliteConnector, u *models.User, signer crypto.Signer, pkg string) string {
+	t.Helper()
+	payload := `{"type":"decision","signer":"` + u.ID + `","ecosystem":"go","package_id":"` + pkg + `","version":"v1.0.0","level":"vetted"}`
+	body, _ := json.Marshal(signPayload(t, signer, payload))
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.SetPathValue("id", u.ID)
+	w := httptest.NewRecorder()
+	handlers.CreateSignatureHandler(db)(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("uploadDecision: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var sig models.Signature
+	json.NewDecoder(w.Body).Decode(&sig)
+	return sig.ID
+}
+
+func TestCreateSignatureHandler_Revocation(t *testing.T) {
+	db := newTestDB(t)
+	u, signer := createTestUser(t, db)
+
+	sigID := uploadDecision(t, db, u, signer, "github.com/foo/bar")
+
+	// Upload revocation
+	revokePayload := `{"type":"revocation","signer":"` + u.ID + `","target_id":"` + sigID + `"}`
+	body, _ := json.Marshal(signPayload(t, signer, revokePayload))
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.SetPathValue("id", u.ID)
+	w := httptest.NewRecorder()
+	handlers.CreateSignatureHandler(db)(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("revocation upload: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Original signature must now be marked revoked
+	got, err := db.GetSignature(sigID)
+	if err != nil {
+		t.Fatalf("GetSignature failed: %v", err)
+	}
+	if !got.Revoked {
+		t.Error("expected original signature to be marked revoked")
+	}
+	if got.RevokedAt == nil {
+		t.Error("expected RevokedAt to be set")
+	}
+}
