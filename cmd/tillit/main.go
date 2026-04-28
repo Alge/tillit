@@ -44,6 +44,8 @@ func main() {
 		err = commands.Status(args)
 	case "query":
 		err = commands.Query(args)
+	case "check":
+		err = commands.Check(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -77,5 +79,6 @@ commands:
   sync                        pull signatures from all trusted peers into local cache
   publish                     push any locally-cached signatures to registered servers
   status                      show pending pushes and last-sync time per registered server
-  query <ecosystem> <pkg>     show trusted versions of a package, grouped by status`)
+  query <ecosystem> <pkg>     show trusted versions of a package, grouped by status
+  check <lockfile>            check every package in a lockfile against the trust graph`)
 }
