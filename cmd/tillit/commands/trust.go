@@ -176,13 +176,9 @@ func revokeActiveConnection(s *localstore.Store, signer tillit_crypto.Signer, us
 
 func Distrust(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: tillit distrust <userID@server_url>")
+		return fmt.Errorf("usage: tillit distrust <userID>")
 	}
-
-	id, serverURL, err := parsePeer(args[0])
-	if err != nil {
-		return err
-	}
+	id := args[0]
 
 	s, err := openStore()
 	if err != nil {
@@ -195,9 +191,16 @@ func Distrust(args []string) error {
 		return err
 	}
 
-	// Distrust is a local concept — we don't expose it on the server, but
-	// we do revoke any previously-published trust connection so peers stop
-	// inheriting from this person via us.
+	// Preserve the server URL from any existing peer record; distrust
+	// operates on identity, not on a specific discovery location.
+	serverURL := ""
+	if existing, err := s.GetPeer(id); err == nil && existing != nil {
+		serverURL = existing.ServerURL
+	}
+
+	// Distrust is local — we don't expose it on the server, but we do
+	// revoke any previously-published trust connection so peers stop
+	// inheriting trust through us.
 	if err := recordTrustChange(s, signer, userID, &localstore.Peer{
 		ID:         id,
 		ServerURL:  serverURL,
@@ -206,19 +209,15 @@ func Distrust(args []string) error {
 		return err
 	}
 
-	fmt.Printf("Distrusting %s@%s\n", id, serverURL)
+	fmt.Printf("Distrusting %s\n", id)
 	return nil
 }
 
 func Forget(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: tillit forget <userID@server_url>")
+		return fmt.Errorf("usage: tillit forget <userID>")
 	}
-
-	id, _, err := parsePeer(args[0])
-	if err != nil {
-		return err
-	}
+	id := args[0]
 
 	s, err := openStore()
 	if err != nil {
