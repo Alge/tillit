@@ -3,39 +3,138 @@ package resolver
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/Alge/tillit/models"
 )
 
-// Package returns the viewer's verdict on every known version of the
-// package. Versions with no contributing decision from a trusted signer
-// are absent from the result; callers should treat absence as Unknown.
-//
-// The resolver handles two payload types:
-//
-//   - PayloadTypeDecision: an exact-version vetting. Always counts.
-//
-//   - PayloadTypeDeltaDecision: a vetting of the changes between
-//     FromVersion and ToVersion. A REJECTED diff applies unconditionally
-//     to ToVersion. An ALLOWED or VETTED diff only applies if
-//     FromVersion has a non-rejected verdict from the same trust set
-//     (i.e. the chain extends from an already-trusted base).
+// Package returns the viewer's verdict on the package as a sorted list of
+// merged spans. Exact decisions contribute single-version spans; delta
+// decisions contribute spans covering [FromVersion, ToVersion] (when the
+// chain is trusted). Same-status spans that overlap are merged, so a
+// long delta chain shows as one continuous range.
 func (r *Resolver) Package(viewer, ecosystem, packageID string) (PackageVerdict, error) {
-	trustSet, err := r.buildTrustSet(viewer)
+	allSigs, err := r.collectMatching(viewer, ecosystem, packageID)
 	if err != nil {
 		return PackageVerdict{}, err
 	}
 
-	type sigInfo struct {
-		decision ContributingDecision
-		fromVer  string // empty for exact decisions
+	resolveCache := map[string]Verdict{}
+	resolving := map[string]bool{}
+	versionVerdict := func(version string) Verdict {
+		return r.resolveVersion(version, allSigs, resolveCache, resolving)
 	}
-	sigsByVersion := map[string][]sigInfo{}
 
+	// Build raw spans — one per applicable sig.
+	var spans []VersionSpan
+	for _, sig := range allSigs {
+		switch {
+		case !sig.isDelta:
+			spans = append(spans, VersionSpan{
+				From:      sig.exactVersion,
+				To:        sig.exactVersion,
+				Status:    statusFromLevel(sig.decision.Level),
+				Decisions: []ContributingDecision{sig.decision},
+			})
+		case sig.decision.Level == string(models.DecisionRejected):
+			spans = append(spans, VersionSpan{
+				From:      sig.fromVersion,
+				To:        sig.toVersion,
+				Status:    StatusRejected,
+				Decisions: []ContributingDecision{sig.decision},
+			})
+		default:
+			// Vetted/allowed delta — chain only counts when from is trusted.
+			from := versionVerdict(sig.fromVersion)
+			if from.Status == StatusAllowed || from.Status == StatusVetted {
+				spans = append(spans, VersionSpan{
+					From:      sig.fromVersion,
+					To:        sig.toVersion,
+					Status:    statusFromLevel(sig.decision.Level),
+					Decisions: []ContributingDecision{sig.decision},
+				})
+			}
+		}
+	}
+
+	merged := mergeSpans(spans)
+	return PackageVerdict{Ecosystem: ecosystem, PackageID: packageID, Spans: merged}, nil
+}
+
+// Version returns the verdict for one specific version, considering both
+// exact decisions matching it and delta decisions whose [from, to]
+// covers it.
+func (r *Resolver) Version(viewer, ecosystem, packageID, version string) (Verdict, error) {
+	allSigs, err := r.collectMatching(viewer, ecosystem, packageID)
+	if err != nil {
+		return Verdict{}, err
+	}
+	return r.resolveVersion(version, allSigs, map[string]Verdict{}, map[string]bool{}), nil
+}
+
+// resolveVersion answers: given the trust set's signatures, what's the
+// verdict on this specific version? Considers exact matches and delta
+// coverage. Memoised against repeated lookups; cycles return Unknown.
+func (r *Resolver) resolveVersion(version string, allSigs []sigInfo, cache map[string]Verdict, resolving map[string]bool) Verdict {
+	if v, ok := cache[version]; ok {
+		return v
+	}
+	if resolving[version] {
+		return Verdict{Status: StatusUnknown}
+	}
+	resolving[version] = true
+	defer delete(resolving, version)
+
+	var decisions []ContributingDecision
+	for _, sig := range allSigs {
+		if !sig.isDelta {
+			if sig.exactVersion == version {
+				decisions = append(decisions, sig.decision)
+			}
+			continue
+		}
+		// Delta: version must fall in [from, to].
+		if CompareVersions(sig.fromVersion, version) > 0 || CompareVersions(version, sig.toVersion) > 0 {
+			continue
+		}
+		if sig.decision.Level == string(models.DecisionRejected) {
+			decisions = append(decisions, sig.decision)
+			continue
+		}
+		// Vetted/allowed: chain requires from to be trusted.
+		from := r.resolveVersion(sig.fromVersion, allSigs, cache, resolving)
+		if from.Status == StatusAllowed || from.Status == StatusVetted {
+			decisions = append(decisions, sig.decision)
+		}
+	}
+	v := Verdict{Status: aggregate(decisions), Decisions: decisions}
+	cache[version] = v
+	return v
+}
+
+// sigInfo is one trusted signature about the package, parsed and
+// pre-categorised so the resolver doesn't re-parse on every lookup.
+type sigInfo struct {
+	decision     ContributingDecision
+	isDelta      bool
+	exactVersion string
+	fromVersion  string
+	toVersion    string
+}
+
+// collectMatching builds the trust set, then returns every parsed
+// signature within it that matches (ecosystem, packageID).
+func (r *Resolver) collectMatching(viewer, ecosystem, packageID string) ([]sigInfo, error) {
+	trustSet, err := r.buildTrustSet(viewer)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []sigInfo
 	for signer, entry := range trustSet {
 		sigs, err := r.store.GetCachedSignaturesBySigner(signer)
 		if err != nil {
-			return PackageVerdict{}, fmt.Errorf("get signatures for %s: %w", signer, err)
+			return nil, fmt.Errorf("get signatures for %s: %w", signer, err)
 		}
 		for _, sig := range sigs {
 			if sig.Revoked {
@@ -51,7 +150,6 @@ func (r *Resolver) Package(viewer, ecosystem, packageID string) (PackageVerdict,
 			if entry.VetoOnly && p.Level != models.DecisionRejected {
 				continue
 			}
-
 			d := ContributingDecision{
 				SignerID:    signer,
 				Path:        copyPath(entry.Path),
@@ -60,82 +158,63 @@ func (r *Resolver) Package(viewer, ecosystem, packageID string) (PackageVerdict,
 				SignatureID: sig.ID,
 				VetoOnly:    entry.VetoOnly,
 			}
-
 			switch p.Type {
 			case models.PayloadTypeDecision:
-				sigsByVersion[p.Version] = append(sigsByVersion[p.Version], sigInfo{decision: d})
+				out = append(out, sigInfo{decision: d, exactVersion: p.Version})
 			case models.PayloadTypeDeltaDecision:
-				sigsByVersion[p.ToVersion] = append(sigsByVersion[p.ToVersion], sigInfo{
-					decision: d, fromVer: p.FromVersion,
+				out = append(out, sigInfo{
+					decision: d, isDelta: true,
+					fromVersion: p.FromVersion, toVersion: p.ToVersion,
 				})
 			}
 		}
 	}
-
-	// Resolve every version with at least one signature, walking diff
-	// chains via memoized recursion. resolving tracks the current
-	// recursion stack so cycles return Unknown without caching.
-	cache := map[string]Verdict{}
-	resolving := map[string]bool{}
-	var resolve func(version string) Verdict
-	resolve = func(version string) Verdict {
-		if v, ok := cache[version]; ok {
-			return v
-		}
-		if resolving[version] {
-			return Verdict{Status: StatusUnknown}
-		}
-		resolving[version] = true
-		defer delete(resolving, version)
-
-		var decisions []ContributingDecision
-		for _, info := range sigsByVersion[version] {
-			if info.fromVer == "" {
-				decisions = append(decisions, info.decision)
-				continue
-			}
-			// Diff sig — rejection applies unconditionally; approval
-			// requires the from-version to be trusted.
-			if info.decision.Level == string(models.DecisionRejected) {
-				decisions = append(decisions, info.decision)
-				continue
-			}
-			from := resolve(info.fromVer)
-			if from.Status == StatusAllowed || from.Status == StatusVetted {
-				decisions = append(decisions, info.decision)
-			}
-		}
-		v := Verdict{Status: aggregate(decisions), Decisions: decisions}
-		cache[version] = v
-		return v
-	}
-
-	versions := map[string]Verdict{}
-	for version := range sigsByVersion {
-		v := resolve(version)
-		if len(v.Decisions) > 0 {
-			versions[version] = v
-		}
-	}
-	return PackageVerdict{
-		Ecosystem: ecosystem,
-		PackageID: packageID,
-		Versions:  versions,
-	}, nil
+	return out, nil
 }
 
-// Version returns the verdict for one specific version. Equivalent to
-// looking the version up in Package(...).Versions, but returns an
-// explicit Unknown verdict for absent versions.
-func (r *Resolver) Version(viewer, ecosystem, packageID, version string) (Verdict, error) {
-	pv, err := r.Package(viewer, ecosystem, packageID)
-	if err != nil {
-		return Verdict{}, err
+// mergeSpans sorts spans by From and merges adjacent same-status spans
+// whose ranges overlap or touch (next.From ≤ prev.To). Different-status
+// spans aren't merged here — callers see overlapping ranges in their
+// raw form, which the CLI renders as separate rows.
+func mergeSpans(spans []VersionSpan) []VersionSpan {
+	if len(spans) == 0 {
+		return nil
 	}
-	if v, ok := pv.Versions[version]; ok {
-		return v, nil
+	sort.Slice(spans, func(i, j int) bool {
+		if c := CompareVersions(spans[i].From, spans[j].From); c != 0 {
+			return c < 0
+		}
+		return CompareVersions(spans[i].To, spans[j].To) < 0
+	})
+
+	out := []VersionSpan{spans[0]}
+	for _, s := range spans[1:] {
+		last := &out[len(out)-1]
+		if last.Status == s.Status && CompareVersions(s.From, last.To) <= 0 {
+			if CompareVersions(s.To, last.To) > 0 {
+				last.To = s.To
+			}
+			last.Decisions = append(last.Decisions, s.Decisions...)
+			continue
+		}
+		out = append(out, s)
 	}
-	return Verdict{Status: StatusUnknown}, nil
+	return out
+}
+
+// statusFromLevel maps a payload DecisionLevel string to a resolver Status.
+// Unknown levels (shouldn't happen with validated payloads) map to Unknown.
+func statusFromLevel(level string) Status {
+	switch level {
+	case string(models.DecisionRejected):
+		return StatusRejected
+	case string(models.DecisionVetted):
+		return StatusVetted
+	case string(models.DecisionAllowed):
+		return StatusAllowed
+	default:
+		return StatusUnknown
+	}
 }
 
 // aggregate applies the verdict precedence: any rejected wins, else any

@@ -50,14 +50,26 @@ type Verdict struct {
 	Decisions []ContributingDecision
 }
 
-// PackageVerdict aggregates everything we know about a package from the
-// viewer's perspective. Only versions with at least one decision from a
-// trusted signer appear in the map; an absent version is implicitly
-// Unknown (the Version method makes that explicit).
+// PackageVerdict summarises everything we know about a package from the
+// viewer's perspective as a sorted, merged list of trust spans. Each
+// VersionSpan covers a contiguous run of versions sharing one status.
+// A delta(A, B) signature contributes a span [A, B] (extending trust to
+// every version in between) when its base is trusted; an exact decision
+// contributes a single-version span.
 type PackageVerdict struct {
 	Ecosystem string
 	PackageID string
-	Versions  map[string]Verdict
+	Spans     []VersionSpan
+}
+
+// VersionSpan covers a contiguous run of versions sharing one Status.
+// From == To for single-version spans (exact decisions). For broader
+// spans, From is the lowest covered version and To is the highest.
+type VersionSpan struct {
+	From      string
+	To        string
+	Status    Status
+	Decisions []ContributingDecision
 }
 
 // ContributingDecision is one signed decision from one signer in the trust
