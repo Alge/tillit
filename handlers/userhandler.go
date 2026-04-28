@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -15,35 +14,27 @@ func CreateUserHandler(database db.DatabaseConnector) func(w http.ResponseWriter
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			type NewUserInput struct {
+				ID     string `json:"id"`
 				Username  string `json:"username"`
 				Publickey string `json:"public_key"`
 			}
 
 			userInput, err := decode[NewUserInput](r)
-
 			if err != nil {
-				log.Println("Invalid data")
-			}
-
-			log.Printf("Creating new user: %s, pubkey: %s", userInput.Username, userInput.Publickey)
-
-			u, err := models.NewUser(userInput.Username, userInput.Publickey)
-			if err != nil {
-				fmt.Fprintf(w, "Failed creating user: %s", err)
-			}
-
-			// Validate the public key
-			key, err := u.GetPublicKey()
-			if err != nil {
-				fmt.Fprintf(w, "Invalid pulic key: %s", err)
+				http.Error(w, "Invalid request body", http.StatusBadRequest)
 				return
 			}
-			log.Printf("Pubkey: %v", key)
 
-			// Store the user in the database
-			err = database.CreateUser(u)
-			if err != nil {
+			u := &models.User{
+				ID:       userInput.ID,
+				Username: userInput.Username,
+				PubKey:   userInput.Publickey,
+			}
+
+			if err := database.CreateUser(u); err != nil {
 				log.Printf("Failed inserting user into database: %s", err)
+				http.Error(w, "Failed creating user", http.StatusInternalServerError)
+				return
 			}
 
 			w.Header().Set("Content-Type", "application/json")
@@ -57,52 +48,42 @@ func GetUserIDHandler(database db.DatabaseConnector) func(w http.ResponseWriter,
 		func(w http.ResponseWriter, r *http.Request) {
 			uID := r.PathValue("id")
 
-			log.Printf("Trying to find user with id: '%s'", uID)
-
 			user, err := database.GetUser(uID)
 			if err != nil {
-				log.Printf("Could not find user")
 				http.NotFound(w, r)
 				return
 			}
 
-			encode(w, r, 200, user)
-
+			encode(w, r, http.StatusOK, user)
 		},
 	)
 }
 
 func GetUserListHandler(database db.DatabaseConnector) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Default pagination values
 		const (
 			defaultPage = 1
 			defaultSize = 10
 			maxSize     = 100
 		)
 
-		// Parse query parameters
 		query := r.URL.Query()
 
-		// Parse 'page' parameter
-		pageStr := query.Get("page")
 		page := defaultPage
-		if pageStr != "" {
+		if pageStr := query.Get("page"); pageStr != "" {
 			p, err := strconv.Atoi(pageStr)
 			if err != nil || p < 1 {
-				http.Error(w, "Invalid 'page' parameter. It must be a positive integer.", http.StatusBadRequest)
+				http.Error(w, "Invalid 'page' parameter", http.StatusBadRequest)
 				return
 			}
 			page = p
 		}
 
-		// Parse 'size' parameter
-		sizeStr := query.Get("size")
 		size := defaultSize
-		if sizeStr != "" {
+		if sizeStr := query.Get("size"); sizeStr != "" {
 			s, err := strconv.Atoi(sizeStr)
 			if err != nil || s < 1 {
-				http.Error(w, "Invalid 'size' parameter. It must be a positive integer.", http.StatusBadRequest)
+				http.Error(w, "Invalid 'size' parameter", http.StatusBadRequest)
 				return
 			}
 			if s > maxSize {
@@ -112,7 +93,6 @@ func GetUserListHandler(database db.DatabaseConnector) func(w http.ResponseWrite
 			}
 		}
 
-		// Retrieve users and total count from the database
 		response, err := database.GetUserList(page, size)
 		if err != nil {
 			log.Printf("Error fetching users: %v", err)
@@ -120,7 +100,6 @@ func GetUserListHandler(database db.DatabaseConnector) func(w http.ResponseWrite
 			return
 		}
 
-		// Encode the response
 		encode(w, r, http.StatusOK, response)
 	}
 }
