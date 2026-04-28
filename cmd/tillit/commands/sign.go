@@ -4,14 +4,20 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Alge/tillit/ecosystems"
 	"github.com/Alge/tillit/localstore"
 	"github.com/Alge/tillit/models"
 )
 
+// Sign signs an exact-version vetting decision (or, with --from, a diff
+// decision attesting review of the changes between two versions).
+//
+// usage:
+//   tillit sign <ecosystem> <package> <version> --level <level> [--reason "..."]
+//   tillit sign <ecosystem> <package> <to-version> --from <from-version> --level <level> [--reason "..."]
 func Sign(args []string) error {
-	// usage: tillit sign <ecosystem> <package_id> <version> --level <allowed|vetted|rejected> [--reason "..."]
 	if len(args) < 3 {
-		return fmt.Errorf("usage: tillit sign <ecosystem> <package_id> <version> --level <allowed|vetted|rejected> [--reason \"...\"]")
+		return fmt.Errorf("usage: tillit sign <ecosystem> <package_id> <version> --level <allowed|vetted|rejected> [--from <prev-version>] [--reason \"...\"]")
 	}
 	ecosystem := args[0]
 	packageID := args[1]
@@ -19,6 +25,7 @@ func Sign(args []string) error {
 
 	level := ""
 	reason := ""
+	fromVersion := ""
 	for i := 3; i < len(args); i++ {
 		switch args[i] {
 		case "--level":
@@ -33,6 +40,12 @@ func Sign(args []string) error {
 			}
 			i++
 			reason = args[i]
+		case "--from":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--from requires a value")
+			}
+			i++
+			fromVersion = args[i]
 		default:
 			return fmt.Errorf("unknown flag: %s", args[i])
 		}
@@ -52,14 +65,35 @@ func Sign(args []string) error {
 		return err
 	}
 
-	payload := &models.Payload{
-		Type:      models.PayloadTypeDecision,
-		Signer:    userID,
-		Ecosystem: ecosystem,
-		PackageID: packageID,
-		Version:   version,
-		Level:     models.DecisionLevel(level),
-		Reason:    reason,
+	var payload *models.Payload
+	if fromVersion != "" {
+		// Validate ordering using the ecosystem's comparator if we have one.
+		if a, ok := adapterForEcosystem(ecosystem); ok {
+			if a.CompareVersions(fromVersion, version) >= 0 {
+				return fmt.Errorf("--from %s must precede %s in %s ordering",
+					fromVersion, version, ecosystem)
+			}
+		}
+		payload = &models.Payload{
+			Type:        models.PayloadTypeDiffDecision,
+			Signer:      userID,
+			Ecosystem:   ecosystem,
+			PackageID:   packageID,
+			FromVersion: fromVersion,
+			ToVersion:   version,
+			Level:       models.DecisionLevel(level),
+			Reason:      reason,
+		}
+	} else {
+		payload = &models.Payload{
+			Type:      models.PayloadTypeDecision,
+			Signer:    userID,
+			Ecosystem: ecosystem,
+			PackageID: packageID,
+			Version:   version,
+			Level:     models.DecisionLevel(level),
+			Reason:    reason,
+		}
 	}
 	signed, err := signPayload(signer, payload)
 	if err != nil {
@@ -79,9 +113,27 @@ func Sign(args []string) error {
 		return fmt.Errorf("failed saving signature: %w", err)
 	}
 
-	fmt.Printf("Signed %s/%s@%s as %s (id: %s)\n", ecosystem, packageID, version, level, signed.ID)
+	if fromVersion != "" {
+		fmt.Printf("Signed diff %s/%s %s → %s as %s (id: %s)\n",
+			ecosystem, packageID, fromVersion, version, level, signed.ID)
+	} else {
+		fmt.Printf("Signed %s/%s@%s as %s (id: %s)\n",
+			ecosystem, packageID, version, level, signed.ID)
+	}
 	fmt.Println("Run 'tillit publish' to push it to your registered servers.")
 	return nil
+}
+
+// adapterForEcosystem returns the first registered adapter whose
+// Ecosystem() matches name. The "ok" return is false if no adapter
+// claims that ecosystem (sign still proceeds; ordering won't be checked).
+func adapterForEcosystem(name string) (ecosystems.Adapter, bool) {
+	for _, a := range adapters {
+		if a.Ecosystem() == name {
+			return a, true
+		}
+	}
+	return nil, false
 }
 
 func Revoke(args []string) error {
@@ -124,7 +176,6 @@ func Revoke(args []string) error {
 		return fmt.Errorf("failed saving revocation: %w", err)
 	}
 
-	// Mark the locally-cached target as revoked too, so check works offline.
 	if existing, err := s.GetCachedSignature(targetID); err == nil {
 		existing.Revoked = true
 		existing.RevokedAt = &now

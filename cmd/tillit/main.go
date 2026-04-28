@@ -73,8 +73,8 @@ commands:
   distrust <id>               explicitly distrust a peer (blocks transitive trust)
   forget <id>                 remove a peer entirely (revokes any published trust connection)
   peers                       list all configured peers
-  sign <ecosystem> <pkg> <version> --level <allowed|vetted|rejected> [--reason "..."]
-                              sign and publish a vetting decision
+  sign <ecosystem> <pkg> <version> --level <allowed|vetted|rejected> [--from <prev-version>] [--reason "..."]
+                              sign a vetting decision (or, with --from, a diff between two versions)
   revoke <signature_id>       revoke a previously published decision
   sync                        pull signatures from all trusted peers into local cache
   publish                     push any locally-cached signatures to registered servers
