@@ -216,6 +216,22 @@ func TestPackage_TransitiveTrust(t *testing.T) {
 	}
 }
 
+func TestPackage_SelfSignedDecisionShowsUp(t *testing.T) {
+	s := newTestStore(t)
+	// No peers — but viewer's own decisions should still resolve.
+	addDecision(t, s, "me", "go", "asdf", "v3.0.0", models.DecisionAllowed, "personal use")
+
+	r := New(s, "me")
+	pv, _ := r.Package("me", "go", "asdf")
+	v, ok := pv.Versions["v3.0.0"]
+	if !ok {
+		t.Fatalf("expected v3.0.0 in result, got %+v", pv.Versions)
+	}
+	if v.Status != StatusAllowed {
+		t.Errorf("Status = %q, want allowed", v.Status)
+	}
+}
+
 // --- Version query --------------------------------------------------------
 
 func TestVersion_KnownVersion(t *testing.T) {
