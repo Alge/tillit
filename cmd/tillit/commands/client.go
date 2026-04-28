@@ -41,6 +41,23 @@ func uploadSignature(serverURL, userID string, req sigUploadRequest) (*models.Si
 	return &sig, nil
 }
 
+func fetchUser(serverURL, userID string) (*models.User, error) {
+	resp, err := http.Get(fmt.Sprintf("%s/v1/users/%s", serverURL, userID))
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned %s", resp.Status)
+	}
+	var u models.User
+	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return nil, fmt.Errorf("failed decoding response: %w", err)
+	}
+	return &u, nil
+}
+
 func fetchUserSignatures(serverURL, userID string, since *time.Time) ([]*models.Signature, error) {
 	url := fmt.Sprintf("%s/v1/users/%s/signatures", serverURL, userID)
 	if since != nil {

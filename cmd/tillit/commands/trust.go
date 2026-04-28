@@ -66,6 +66,10 @@ func Trust(args []string) error {
 		return err
 	}
 
+	if err := fetchAndCachePubkey(s, serverURL, id); err != nil {
+		return fmt.Errorf("failed fetching peer pubkey: %w", err)
+	}
+
 	if err := recordTrustChange(s, signer, userID, &localstore.Peer{
 		ID:         id,
 		ServerURL:  serverURL,
