@@ -26,8 +26,7 @@ func NewServer(
 
 	// Add these middleware functions to all requests. Reverse execution order
 	var handler http.Handler = mux
-	handler = middleware.Auth(handler, database) // Load the user (if present) into the context
-	handler = httprate.LimitByRealIP(            // Rate limiter
+	handler = httprate.LimitByRealIP( // Rate limiter
 		cfg.Ratelimit.RequestLimit,
 		time.Duration(cfg.Ratelimit.WindowLength)*time.Second,
 	)(handler)
