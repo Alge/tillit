@@ -16,9 +16,10 @@ all: build
 build: $(GO_FILES)
 	@echo "Building the binary..."
 	mkdir -p $(OUTPUT_DIR)
-	go build -o $(OUTPUT_DIR)/$(BINARY_NAME)
+	go build -o $(OUTPUT_DIR)/tillit-server .
+	go build -o $(OUTPUT_DIR)/$(BINARY_NAME) ./cmd/tillit
 
-# Run the application
+# Run the server
 run:
 	go run main.go
 
@@ -87,10 +88,10 @@ mod:
 
 # Install the CLI binary to /usr/local/bin
 install: build
-	@echo "Installing the binary to $(INSTALL_DIR)..."
+	@echo "Installing tillit CLI to $(INSTALL_DIR)..."
 	install -d $(INSTALL_DIR)
 	install -m 755 $(OUTPUT_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
-	@echo "Installation complete. You can now run '$(BINARY_NAME)' from anywhere."
+	@echo "Installation complete. You can now run 'tillit' from anywhere."
 
 # Uninstall the CLI binary from /usr/local/bin
 uninstall:
