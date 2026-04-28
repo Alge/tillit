@@ -17,6 +17,6 @@ func addRoutes(
 	mux.HandleFunc("GET /api/v1/users/", handlers.GetUserListHandler(database))
 	mux.HandleFunc("GET /api/v1/users/{id}", handlers.GetUserIDHandler(database))
 
-	mux.HandleFunc("/healthz", handlers.HandleHealthzPlease())
+	mux.HandleFunc("/health", handlers.HandleHealth())
 	mux.Handle("/", http.NotFoundHandler())
 }
