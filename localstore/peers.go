@@ -16,8 +16,9 @@ type Peer struct {
 	ID         string // peer's user ID (SHA-256 pubkey hash)
 	ServerURL  string
 	TrustDepth int
-	Public   bool
+	Public     bool
 	Distrusted bool
+	VetoOnly   bool // only inherit rejected decisions; ignore vetted/allowed
 }
 
 func (s *Store) migratePeers() error {
@@ -31,8 +32,9 @@ func (s *Store) migratePeers() error {
 			id          TEXT PRIMARY KEY,
 			server_url  TEXT NOT NULL,
 			trust_depth INTEGER NOT NULL DEFAULT 1,
-			public    INTEGER NOT NULL DEFAULT 0,
-			distrusted  INTEGER NOT NULL DEFAULT 0
+			public      INTEGER NOT NULL DEFAULT 0,
+			distrusted  INTEGER NOT NULL DEFAULT 0,
+			veto_only   INTEGER NOT NULL DEFAULT 0
 		);`)
 	return err
 }
@@ -80,11 +82,12 @@ func (s *Store) ListServers() ([]*Server, error) {
 
 func (s *Store) SavePeer(p *Peer) error {
 	_, err := s.db.Exec(
-		`INSERT INTO peers (id, server_url, trust_depth, public, distrusted) VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO peers (id, server_url, trust_depth, public, distrusted, veto_only)
+		 VALUES (?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET server_url=excluded.server_url,
 		 trust_depth=excluded.trust_depth, public=excluded.public,
-		 distrusted=excluded.distrusted`,
-		p.ID, p.ServerURL, p.TrustDepth, p.Public, p.Distrusted,
+		 distrusted=excluded.distrusted, veto_only=excluded.veto_only`,
+		p.ID, p.ServerURL, p.TrustDepth, p.Public, p.Distrusted, p.VetoOnly,
 	)
 	return err
 }
@@ -92,8 +95,9 @@ func (s *Store) SavePeer(p *Peer) error {
 func (s *Store) GetPeer(id string) (*Peer, error) {
 	p := &Peer{}
 	err := s.db.QueryRow(
-		`SELECT id, server_url, trust_depth, public, distrusted FROM peers WHERE id = ?`, id,
-	).Scan(&p.ID, &p.ServerURL, &p.TrustDepth, &p.Public, &p.Distrusted)
+		`SELECT id, server_url, trust_depth, public, distrusted, veto_only
+		 FROM peers WHERE id = ?`, id,
+	).Scan(&p.ID, &p.ServerURL, &p.TrustDepth, &p.Public, &p.Distrusted, &p.VetoOnly)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("peer %q not found", id)
@@ -105,7 +109,8 @@ func (s *Store) GetPeer(id string) (*Peer, error) {
 
 func (s *Store) ListPeers() ([]*Peer, error) {
 	rows, err := s.db.Query(
-		`SELECT id, server_url, trust_depth, public, distrusted FROM peers ORDER BY id`)
+		`SELECT id, server_url, trust_depth, public, distrusted, veto_only
+		 FROM peers ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +119,7 @@ func (s *Store) ListPeers() ([]*Peer, error) {
 	var peers []*Peer
 	for rows.Next() {
 		p := &Peer{}
-		if err := rows.Scan(&p.ID, &p.ServerURL, &p.TrustDepth, &p.Public, &p.Distrusted); err != nil {
+		if err := rows.Scan(&p.ID, &p.ServerURL, &p.TrustDepth, &p.Public, &p.Distrusted, &p.VetoOnly); err != nil {
 			return nil, err
 		}
 		peers = append(peers, p)
