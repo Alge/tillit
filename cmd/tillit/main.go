@@ -28,8 +28,8 @@ func main() {
 		err = commands.Trust(args)
 	case "distrust":
 		err = commands.Distrust(args)
-	case "untrust":
-		err = commands.Untrust(args)
+	case "forget":
+		err = commands.Forget(args)
 	case "peers":
 		err = commands.TrustList(args)
 	case "sign":
@@ -67,7 +67,7 @@ commands:
   trust <id@url> [--depth N] [--public] [--veto-only]
                               add or update a trusted peer
   distrust <id@url>           explicitly distrust a peer (blocks transitive trust)
-  untrust <id@url>            remove a peer entirely
+  forget <id@url>             remove a peer entirely (revokes any published trust connection)
   peers                       list all configured peers
   sign <ecosystem> <pkg> <version> --level <allowed|vetted|rejected> [--reason "..."]
                               sign and publish a vetting decision

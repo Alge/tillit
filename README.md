@@ -44,7 +44,7 @@ Tillit is built around a decentralized web-of-trust model:
 **Trust management**
 - `tillit trust <peer@server> [--depth N] [--delegate]` — add or update a trusted peer
 - `tillit distrust <peer@server>` — explicitly distrust a peer
-- `tillit untrust <peer@server>` — remove a peer entirely
+- `tillit forget <peer@server>` — remove a peer entirely (revokes any published trust connection)
 
 **Signing**
 - `tillit sign version <ecosystem> <package> <version> [--level allowed|vetted|rejected]`
@@ -82,7 +82,7 @@ This is not yet useful
 ### CLI — Trust
 - [ ] `trust <peer@server>`: add/update a trusted peer with depth and delegate flag
 - [ ] `distrust <peer@server>`: explicitly distrust a peer
-- [ ] `untrust <peer@server>`: remove a peer entirely
+- [ ] `forget <peer@server>`: remove a peer entirely
 - [ ] Global account-level cap on trust depth exposed to those who trust me
 
 ### CLI — Signing

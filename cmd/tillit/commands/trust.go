@@ -210,9 +210,9 @@ func Distrust(args []string) error {
 	return nil
 }
 
-func Untrust(args []string) error {
+func Forget(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: tillit untrust <userID@server_url>")
+		return fmt.Errorf("usage: tillit forget <userID@server_url>")
 	}
 
 	id, _, err := parsePeer(args[0])
