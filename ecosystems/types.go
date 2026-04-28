@@ -8,19 +8,24 @@
 // go.sum, go.mod, or any future Go-ecosystem format.
 package ecosystems
 
-import "io"
+import "io/fs"
 
 // PackageRef is one (ecosystem, package, version) tuple extracted from a
-// lockfile. The resolver keys on Ecosystem+PackageID+Version; Hash and Source
-// are exposed for adapters that have them but the resolver may ignore them.
+// lockfile. The resolver keys on Ecosystem+PackageID+Version; the other
+// fields are descriptive metadata adapters fill in when they can.
 type PackageRef struct {
 	Ecosystem string
 	PackageID string
 	Version   string
 
-	// Optional metadata. Adapters fill what they can; consumers may ignore
-	// what they don't need. None of these participate in the trust lookup
-	// key today.
+	// Direct reports whether the project declares this as a direct
+	// dependency (as opposed to inherited transitively). For ecosystems
+	// where the distinction requires a separate file (Go's go.mod, npm's
+	// package.json, etc.), Direct is best-effort: false when the project
+	// file isn't available.
+	Direct bool
+
+	// Optional metadata. None of these participate in the trust lookup key.
 	Hash   string // artifact hash, e.g. "h1:abc=", "sha512-..."
 	Source string // registry URL or "local"/"git" for non-registry sources
 }
@@ -36,6 +41,12 @@ type ParseResult struct {
 // Adapter parses one lockfile format. Each format gets its own adapter;
 // adapters serving the same package ecosystem return the same Ecosystem()
 // value.
+//
+// Adapters take an fs.FS rather than an io.Reader so they can also read
+// sibling files — most ecosystems need the project manifest (go.mod,
+// package.json, pyproject.toml) alongside the lockfile to distinguish
+// direct from transitive dependencies. Tests use fstest.MapFS; production
+// callers use os.DirFS rooted at the project directory.
 type Adapter interface {
 	// Ecosystem is the canonical ecosystem identifier used in signatures —
 	// "go", "pip", "npm", etc. Drives the trust lookup key.
@@ -45,12 +56,13 @@ type Adapter interface {
 	// handles, e.g. "go.sum" or "Pipfile.lock". Used in CLI output.
 	Name() string
 
-	// CanParse reports whether this adapter recognises the given path.
-	// Typically a filename match. The caller is expected to call CanParse
-	// before Parse.
+	// CanParse reports whether this adapter recognises the given path
+	// (relative to whichever fs.FS the caller uses). Typically a filename
+	// match. The caller is expected to call CanParse before Parse.
 	CanParse(path string) bool
 
-	// Parse reads the lockfile content and returns the canonical package
-	// list plus any non-fatal warnings.
-	Parse(r io.Reader) (ParseResult, error)
+	// Parse reads the lockfile (and any sibling project file the adapter
+	// needs) from the filesystem and returns the canonical package list
+	// plus any non-fatal warnings.
+	Parse(fsys fs.FS, lockfilePath string) (ParseResult, error)
 }
