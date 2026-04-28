@@ -18,8 +18,10 @@ type DatabaseConnector interface {
 
 	GetConnection(id string) (*models.Connection, error)
 	GetUserConnections(userID string) ([]*models.Connection, error)
+	GetUserPublicConnections(userID string, since *time.Time) ([]*models.Connection, error)
 	CreateConnection(u *models.Connection) error
 	DeleteConnection(u *models.Connection) error
+	RevokeConnection(id string, at time.Time) error
 
 	GetSignature(id string) (*models.Signature, error)
 	GetUserSignatures(signerID string, since *time.Time) ([]*models.Signature, error)
