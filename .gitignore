@@ -27,3 +27,7 @@ bin/*
 *.db
 config.toml
 *.db.sqlite3
+
+# Built binaries when running `go build` from the repo root
+/tillit
+/tillit-server

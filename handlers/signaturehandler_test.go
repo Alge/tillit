@@ -13,6 +13,7 @@ import (
 	"github.com/Alge/tillit/db/sqliteconnector"
 	"github.com/Alge/tillit/handlers"
 	"github.com/Alge/tillit/models"
+	"github.com/google/uuid"
 )
 
 func newTestDB(t *testing.T) *sqliteconnector.SqliteConnector {
@@ -42,6 +43,7 @@ func createTestUser(t *testing.T, db *sqliteconnector.SqliteConnector) (*models.
 }
 
 type sigRequest struct {
+	ID        string `json:"id"`
 	Payload   string `json:"payload"`
 	Algorithm string `json:"algorithm"`
 	Sig       string `json:"sig"`
@@ -54,6 +56,7 @@ func signPayload(t *testing.T, signer crypto.Signer, payload string) sigRequest 
 		t.Fatalf("failed signing: %v", err)
 	}
 	return sigRequest{
+		ID:        uuid.NewString(),
 		Payload:   payload,
 		Algorithm: signer.Algorithm(),
 		Sig:       base64.RawURLEncoding.EncodeToString(sigBytes),

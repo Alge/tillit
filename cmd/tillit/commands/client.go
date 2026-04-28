@@ -11,6 +11,7 @@ import (
 )
 
 type sigUploadRequest struct {
+	ID        string `json:"id"`
 	Payload   string `json:"payload"`
 	Algorithm string `json:"algorithm"`
 	Sig       string `json:"sig"`
