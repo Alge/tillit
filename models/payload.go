@@ -9,7 +9,7 @@ type PayloadType string
 
 const (
 	PayloadTypeDecision             PayloadType = "decision"
-	PayloadTypeDiffDecision         PayloadType = "diff_decision"
+	PayloadTypeDeltaDecision        PayloadType = "delta_decision"
 	PayloadTypeRevocation           PayloadType = "revocation"
 	PayloadTypeConnection           PayloadType = "connection"
 	PayloadTypeConnectionRevocation PayloadType = "connection_revocation"
@@ -41,11 +41,11 @@ type Payload struct {
 	// Used by PayloadTypeDecision (the only version field).
 	Version string `json:"version,omitempty"`
 
-	// Used by PayloadTypeDiffDecision: the signer attests they reviewed
-	// the changes between FromVersion and ToVersion. Vetted/allowed diff
-	// decisions only confer trust on ToVersion when FromVersion is
-	// itself trusted (the resolver walks the chain). Rejected diff
-	// decisions reject ToVersion unconditionally.
+	// Used by PayloadTypeDeltaDecision: the signer attests they reviewed
+	// the changes between FromVersion and ToVersion. Vetted/allowed delta
+	// decisions only confer trust on ToVersion when FromVersion is itself
+	// trusted (the resolver walks the chain). Rejected delta decisions
+	// reject ToVersion unconditionally.
 	FromVersion string `json:"from_version,omitempty"`
 	ToVersion   string `json:"to_version,omitempty"`
 
@@ -86,18 +86,18 @@ func (p *Payload) Validate() error {
 		if !validLevels[p.Level] {
 			return fmt.Errorf("level must be one of: allowed, vetted, rejected; got %q", p.Level)
 		}
-	case PayloadTypeDiffDecision:
+	case PayloadTypeDeltaDecision:
 		if p.Ecosystem == "" {
-			return fmt.Errorf("ecosystem is required for diff_decision payloads")
+			return fmt.Errorf("ecosystem is required for delta_decision payloads")
 		}
 		if p.PackageID == "" {
-			return fmt.Errorf("package_id is required for diff_decision payloads")
+			return fmt.Errorf("package_id is required for delta_decision payloads")
 		}
 		if p.FromVersion == "" {
-			return fmt.Errorf("from_version is required for diff_decision payloads")
+			return fmt.Errorf("from_version is required for delta_decision payloads")
 		}
 		if p.ToVersion == "" {
-			return fmt.Errorf("to_version is required for diff_decision payloads")
+			return fmt.Errorf("to_version is required for delta_decision payloads")
 		}
 		if p.FromVersion == p.ToVersion {
 			return fmt.Errorf("from_version and to_version must differ (got %q for both)", p.FromVersion)

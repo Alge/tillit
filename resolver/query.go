@@ -15,7 +15,7 @@ import (
 //
 //   - PayloadTypeDecision: an exact-version vetting. Always counts.
 //
-//   - PayloadTypeDiffDecision: a vetting of the changes between
+//   - PayloadTypeDeltaDecision: a vetting of the changes between
 //     FromVersion and ToVersion. A REJECTED diff applies unconditionally
 //     to ToVersion. An ALLOWED or VETTED diff only applies if
 //     FromVersion has a non-rejected verdict from the same trust set
@@ -64,7 +64,7 @@ func (r *Resolver) Package(viewer, ecosystem, packageID string) (PackageVerdict,
 			switch p.Type {
 			case models.PayloadTypeDecision:
 				sigsByVersion[p.Version] = append(sigsByVersion[p.Version], sigInfo{decision: d})
-			case models.PayloadTypeDiffDecision:
+			case models.PayloadTypeDeltaDecision:
 				sigsByVersion[p.ToVersion] = append(sigsByVersion[p.ToVersion], sigInfo{
 					decision: d, fromVer: p.FromVersion,
 				})

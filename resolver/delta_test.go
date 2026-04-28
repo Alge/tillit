@@ -10,11 +10,11 @@ import (
 	"github.com/google/uuid"
 )
 
-func addDiffDecision(t *testing.T, s *localstore.Store, signer, ecosystem, pkg, from, to string, level models.DecisionLevel, reason string) string {
+func addDeltaDecision(t *testing.T, s *localstore.Store, signer, ecosystem, pkg, from, to string, level models.DecisionLevel, reason string) string {
 	t.Helper()
 	now := time.Now().UTC()
 	payload := &models.Payload{
-		Type:        models.PayloadTypeDiffDecision,
+		Type:        models.PayloadTypeDeltaDecision,
 		Signer:      signer,
 		Ecosystem:   ecosystem,
 		PackageID:   pkg,
@@ -48,7 +48,7 @@ func TestPackage_DiffChainExtendsTrust(t *testing.T) {
 	// Exact vetted on v1.0.0; diff vetted from v1.0.0 to v1.1.0 — both
 	// should be trusted from me.
 	addDecision(t, s, "alice", "go", "p", "v1.0.0", models.DecisionVetted, "")
-	addDiffDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "")
 
 	r := New(s, "me")
 	pv, _ := r.Package("me", "go", "p")
@@ -64,7 +64,7 @@ func TestPackage_DiffWithoutBaseTrust_NotApplied(t *testing.T) {
 	s := newTestStore(t)
 	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 0})
 	// Only the diff signed, no base — diff confers no trust on its own.
-	addDiffDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "")
 
 	r := New(s, "me")
 	pv, _ := r.Package("me", "go", "p")
@@ -78,7 +78,7 @@ func TestPackage_DiffRejectIsUnconditional(t *testing.T) {
 	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 0})
 	// A diff REJECTION applies regardless of whether the base is trusted —
 	// "I looked at this diff and it's bad" stands alone.
-	addDiffDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionRejected, "introduced backdoor")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionRejected, "introduced backdoor")
 
 	r := New(s, "me")
 	pv, _ := r.Package("me", "go", "p")
@@ -93,9 +93,9 @@ func TestPackage_DiffChainMultipleHops(t *testing.T) {
 	// v1.0.0 vetted; diffs v1.0→v1.1, v1.1→v1.2, v1.2→v1.3 — all should
 	// be trusted by chain.
 	addDecision(t, s, "alice", "go", "p", "v1.0.0", models.DecisionVetted, "")
-	addDiffDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "")
-	addDiffDecision(t, s, "alice", "go", "p", "v1.1.0", "v1.2.0", models.DecisionVetted, "")
-	addDiffDecision(t, s, "alice", "go", "p", "v1.2.0", "v1.3.0", models.DecisionVetted, "")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.1.0", "v1.2.0", models.DecisionVetted, "")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.2.0", "v1.3.0", models.DecisionVetted, "")
 
 	r := New(s, "me")
 	pv, _ := r.Package("me", "go", "p")
@@ -115,9 +115,9 @@ func TestPackage_DiffChainBreaksOnRejected(t *testing.T) {
 	// alice diff-vetted v1.1.0 → v1.2.0 — should NOT extend trust because
 	// v1.1.0 is rejected.
 	addDecision(t, s, "alice", "go", "p", "v1.0.0", models.DecisionVetted, "")
-	addDiffDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "")
 	addDecision(t, s, "bob", "go", "p", "v1.1.0", models.DecisionRejected, "CVE")
-	addDiffDecision(t, s, "alice", "go", "p", "v1.1.0", "v1.2.0", models.DecisionVetted, "")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.1.0", "v1.2.0", models.DecisionVetted, "")
 
 	r := New(s, "me")
 	pv, _ := r.Package("me", "go", "p")
@@ -132,7 +132,7 @@ func TestPackage_DiffChainBreaksOnRejected(t *testing.T) {
 func TestPackage_VetoOnlySignerDiffApprovalIgnored(t *testing.T) {
 	s := newTestStore(t)
 	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 0, VetoOnly: true})
-	addDiffDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "looks fine")
+	addDeltaDecision(t, s, "alice", "go", "p", "v1.0.0", "v1.1.0", models.DecisionVetted, "looks fine")
 
 	r := New(s, "me")
 	pv, _ := r.Package("me", "go", "p")
@@ -144,7 +144,7 @@ func TestPackage_VetoOnlySignerDiffApprovalIgnored(t *testing.T) {
 func TestPackage_VetoOnlySignerDiffRejectionCounts(t *testing.T) {
 	s := newTestStore(t)
 	addPeer(t, s, &localstore.Peer{ID: "cve-bot", ServerURL: "https://x", TrustDepth: 0, VetoOnly: true})
-	addDiffDecision(t, s, "cve-bot", "go", "p", "v1.0.0", "v1.1.0", models.DecisionRejected, "CVE-2024-...")
+	addDeltaDecision(t, s, "cve-bot", "go", "p", "v1.0.0", "v1.1.0", models.DecisionRejected, "CVE-2024-...")
 
 	r := New(s, "me")
 	pv, _ := r.Package("me", "go", "p")
