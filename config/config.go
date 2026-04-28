@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -12,18 +11,12 @@ import (
 type (
 	Config struct {
 		Server    server
-		JWT       jwt
 		Ratelimit ratelimit
 		Database  database
 	}
 	server struct {
 		HostName string
 		Port     int
-	}
-
-	jwt struct {
-		Secret      string
-		SecretBytes []byte
 	}
 
 	ratelimit struct {
@@ -41,10 +34,6 @@ type (
 
 func (cfg *Config) Validate() error {
 	if err := cfg.Server.Validate(); err != nil {
-		return err
-	}
-
-	if err := cfg.JWT.Validate(); err != nil {
 		return err
 	}
 
@@ -66,14 +55,6 @@ func (s *server) Validate() error {
 	if s.Port <= 0 || s.Port > 65535 {
 		return errors.New("server.Port needs to be between 1 and 65535")
 	}
-	return nil
-}
-
-func (j *jwt) Validate() error {
-	if len(j.Secret) < 16 {
-		return errors.New("jwt.Secret needs to be at least 16 chars long")
-	}
-
 	return nil
 }
 
@@ -114,8 +95,6 @@ func (cfg *Config) String() string {
 	ret += "Server:\n"
 	ret += "\tHostName: " + cfg.Server.HostName + "\n"
 	ret += "\tPort: " + strconv.Itoa(cfg.Server.Port) + "\n"
-	ret += "JWT:\n"
-	ret += "\tSecret: " + strings.Repeat("*", 16) + "\n"
 	ret += "Ratelimit:\n"
 	ret += "\tRequestLimit: " + strconv.Itoa(cfg.Ratelimit.RequestLimit) + "\n"
 	ret += "\tWindowLength: " + strconv.Itoa(cfg.Ratelimit.WindowLength) + " seconds\n"
@@ -137,6 +116,5 @@ func LoadConfig(filePath string) (*Config, error) {
 		return nil, err
 	}
 
-	AppConfig.JWT.SecretBytes = []byte(AppConfig.JWT.Secret)
 	return AppConfig, err
 }
