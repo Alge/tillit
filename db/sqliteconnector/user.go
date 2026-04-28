@@ -4,97 +4,69 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	_ "fmt"
-	"log"
 
 	"github.com/Alge/tillit/db/dberrors"
 	"github.com/Alge/tillit/models"
 	"github.com/Alge/tillit/responsetypes"
 )
 
-func (c *SqliteConnector) GetUser(id string) (u *models.User, err error) {
 
+func (c *SqliteConnector) GetUser(id string) (*models.User, error) {
 	stmt, err := c.Database.Prepare("SELECT id, username, pubkey FROM users WHERE id = ?")
 	if err != nil {
-		log.Printf("Failed creating statmemt: %s", err)
-		return
+		return nil, fmt.Errorf("failed preparing statement: %w", err)
 	}
 	defer stmt.Close()
-	log.Printf("Statement created")
 
-	row := stmt.QueryRow(id)
-
-	log.Print("Run query")
-
-	u = &models.User{}
-
-	err = row.Scan(&u.ID, &u.Username, &u.PubKey)
-
-	log.Print("Read results")
+	u := &models.User{}
+	err = stmt.QueryRow(id).Scan(&u.ID, &u.Username, &u.PubKey)
 	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-
-			log.Print("No results")
-			return u, dberrors.NewObjectNotFoundError("No such user")
-		default:
-			log.Printf("Other error: %s", err)
-			return u, err
-
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, dberrors.NewObjectNotFoundError("No such user")
 		}
+		return nil, err
 	}
-	return
+	return u, nil
 }
 
-func (c *SqliteConnector) GetUserList(page int, size int) (res *responsetypes.PaginatedResponse[*models.User], err error) {
-
+func (c *SqliteConnector) GetUserList(page int, size int) (*responsetypes.PaginatedResponse[*models.User], error) {
 	stmt, err := c.Database.Prepare("SELECT id, username, pubkey FROM users LIMIT ? OFFSET ?")
 	if err != nil {
-		log.Printf("Failed creating statmemt: %s", err)
-		return
+		return nil, fmt.Errorf("failed preparing statement: %w", err)
 	}
 	defer stmt.Close()
-
-	res = &responsetypes.PaginatedResponse[*models.User]{
-		Page: page,
-	}
-
-	res.Data = []*models.User{}
 
 	rows, err := stmt.Query(size, (page-1)*size)
 	if err != nil {
-		return nil, fmt.Errorf("Failed fetching users from database: %w", err)
+		return nil, fmt.Errorf("failed fetching users from database: %w", err)
+	}
+	defer rows.Close()
+
+	res := &responsetypes.PaginatedResponse[*models.User]{
+		Page: page,
+		Data: []*models.User{},
 	}
 
 	for rows.Next() {
 		u := &models.User{}
-		err = rows.Scan(&u.ID, &u.Username, &u.PubKey)
-		if err != nil {
-			return nil, fmt.Errorf("Failed parsing user object from database: %w", err)
+		if err := rows.Scan(&u.ID, &u.Username, &u.PubKey); err != nil {
+			return nil, fmt.Errorf("failed scanning user row: %w", err)
 		}
 		res.Data = append(res.Data, u)
 	}
 
 	res.Size = len(res.Data)
-
 	return res, nil
 }
 
 func (c *SqliteConnector) CreateUser(u *models.User) error {
-
-	stmt, err := c.Database.Prepare(`
-        INSERT INTO users (id, username, pubkey, is_admin)
-        VALUES (?, ?, ?, ?)
-	`)
+	stmt, err := c.Database.Prepare(`INSERT INTO users (id, username, pubkey, is_admin) VALUES (?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
+	defer stmt.Close()
 
-	// TODO: Actually include the pubkey
 	_, err = stmt.Exec(u.ID, u.Username, u.PubKey, u.IsAdmin)
-	if err != nil {
-		log.Printf("Sqlite: Failed inserting new user: %s", err)
-	}
 	return err
 }
 func (c *SqliteConnector) DeleteUser(u *models.User) error {
@@ -106,7 +78,7 @@ func (c *SqliteConnector) CreateUserTable() error {
 		CREATE TABLE IF NOT EXISTS users (
 			id TEXT PRIMARY KEY,
 			username TEXT NOT NULL UNIQUE,
-			pubkey TEX NOT NULL UNIQUE,
+			pubkey TEXT NOT NULL UNIQUE,
 			is_admin INTEGER DEFAULT 0
 		);
 	`)
