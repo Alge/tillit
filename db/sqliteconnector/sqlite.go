@@ -31,6 +31,11 @@ func Init(dsn string) (*SqliteConnector, error) {
 		return nil, fmt.Errorf("failed creating connection table: %w", err)
 	}
 
+	err = conn.CreateSignatureTable()
+	if err != nil {
+		return nil, fmt.Errorf("failed creating signature table: %w", err)
+	}
+
 	return conn, err
 }
 

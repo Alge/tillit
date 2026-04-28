@@ -3,6 +3,7 @@ package db
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Alge/tillit/db/sqliteconnector"
 	"github.com/Alge/tillit/models"
@@ -21,6 +22,11 @@ type DatabaseConnector interface {
 	GetUserConnections(userID string) ([]*models.Connection, error)
 	CreateConnection(u *models.Connection) error
 	DeleteConnection(u *models.Connection) error
+
+	GetSignature(id string) (*models.Signature, error)
+	GetUserSignatures(signerID string, since *time.Time) ([]*models.Signature, error)
+	CreateSignature(s *models.Signature) error
+	RevokeSignature(id string, at time.Time) error
 }
 
 func Init(connector string, dsn string) (db DatabaseConnector, err error) {
