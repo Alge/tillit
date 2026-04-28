@@ -55,11 +55,12 @@ func TestSaveAndGetPeer(t *testing.T) {
 	s := newTestStore(t)
 
 	peer := &localstore.Peer{
-		ID:           "abc123",
-		ServerURL:    "https://tillit.example.com",
-		TrustDepth:   2,
+		ID:         "abc123",
+		ServerURL:  "https://tillit.example.com",
+		TrustDepth: 2,
 		Public:     true,
-		Distrusted:   false,
+		Distrusted: false,
+		VetoOnly:   false,
 	}
 	if err := s.SavePeer(peer); err != nil {
 		t.Fatalf("SavePeer failed: %v", err)
@@ -71,8 +72,29 @@ func TestSaveAndGetPeer(t *testing.T) {
 	}
 	if got.ID != peer.ID || got.ServerURL != peer.ServerURL ||
 		got.TrustDepth != peer.TrustDepth || got.Public != peer.Public ||
-		got.Distrusted != peer.Distrusted {
+		got.Distrusted != peer.Distrusted || got.VetoOnly != peer.VetoOnly {
 		t.Errorf("got %+v, want %+v", got, peer)
+	}
+}
+
+func TestVetoOnlyPeer(t *testing.T) {
+	s := newTestStore(t)
+
+	peer := &localstore.Peer{
+		ID:        "cve-bot",
+		ServerURL: "https://cve.example.com",
+		VetoOnly:  true,
+	}
+	if err := s.SavePeer(peer); err != nil {
+		t.Fatalf("SavePeer failed: %v", err)
+	}
+
+	got, err := s.GetPeer("cve-bot")
+	if err != nil {
+		t.Fatalf("GetPeer failed: %v", err)
+	}
+	if !got.VetoOnly {
+		t.Error("expected VetoOnly = true")
 	}
 }
 

@@ -18,9 +18,9 @@ func parsePeer(arg string) (id, serverURL string, err error) {
 }
 
 func Trust(args []string) error {
-	// usage: tillit trust <userID@server_url> [--depth N] [--share]
+	// usage: tillit trust <userID@server_url> [--depth N] [--public] [--veto-only]
 	if len(args) == 0 {
-		return fmt.Errorf("usage: tillit trust <userID@server_url> [--depth N] [--share]")
+		return fmt.Errorf("usage: tillit trust <userID@server_url> [--depth N] [--public] [--veto-only]")
 	}
 
 	id, serverURL, err := parsePeer(args[0])
@@ -30,6 +30,7 @@ func Trust(args []string) error {
 
 	depth := 1
 	public := false
+	vetoOnly := false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--depth":
@@ -42,8 +43,10 @@ func Trust(args []string) error {
 				return fmt.Errorf("--depth must be a non-negative integer")
 			}
 			depth = d
-		case "--share":
+		case "--public":
 			public = true
+		case "--veto-only":
+			vetoOnly = true
 		default:
 			return fmt.Errorf("unknown flag: %s", args[i])
 		}
@@ -61,6 +64,7 @@ func Trust(args []string) error {
 		TrustDepth: depth,
 		Public:     public,
 		Distrusted: false,
+		VetoOnly:   vetoOnly,
 	}); err != nil {
 		return fmt.Errorf("failed saving peer: %w", err)
 	}
@@ -68,6 +72,9 @@ func Trust(args []string) error {
 	fmt.Printf("Trusting %s@%s (depth=%d", id, serverURL, depth)
 	if public {
 		fmt.Print(", public")
+	}
+	if vetoOnly {
+		fmt.Print(", veto-only")
 	}
 	fmt.Println(")")
 	return nil
@@ -144,13 +151,19 @@ func TrustList(args []string) error {
 
 	for _, p := range peers {
 		if p.Distrusted {
-			fmt.Printf("  DISTRUST %s@%s\n", p.ID, p.ServerURL)
-		} else {
-			del := ""
+			fmt.Printf("  DISTRUST  %s@%s\n", p.ID, p.ServerURL)
+		} else if p.VetoOnly {
+			extra := ""
 			if p.Public {
-				del = " public"
+				extra = ", public"
 			}
-			fmt.Printf("  trust    %s@%s (depth=%d%s)\n", p.ID, p.ServerURL, p.TrustDepth, del)
+			fmt.Printf("  veto-only %s@%s (depth=%d%s)\n", p.ID, p.ServerURL, p.TrustDepth, extra)
+		} else {
+			extra := ""
+			if p.Public {
+				extra = ", public"
+			}
+			fmt.Printf("  trust     %s@%s (depth=%d%s)\n", p.ID, p.ServerURL, p.TrustDepth, extra)
 		}
 	}
 	return nil
