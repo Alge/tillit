@@ -42,6 +42,8 @@ func main() {
 		err = commands.Publish(args)
 	case "status":
 		err = commands.Status(args)
+	case "query":
+		err = commands.Query(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -74,5 +76,6 @@ commands:
   revoke <signature_id>       revoke a previously published decision
   sync                        pull signatures from all trusted peers into local cache
   publish                     push any locally-cached signatures to registered servers
-  status                      show pending pushes and last-sync time per registered server`)
+  status                      show pending pushes and last-sync time per registered server
+  query <ecosystem> <pkg>     show trusted versions of a package, grouped by status`)
 }
