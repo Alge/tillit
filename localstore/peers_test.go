@@ -2,6 +2,7 @@ package localstore_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Alge/tillit/localstore"
 )
@@ -120,6 +121,120 @@ func TestListPeers(t *testing.T) {
 	}
 	if len(all) != 3 {
 		t.Errorf("expected 3 peers total, got %d", len(all))
+	}
+}
+
+func TestPeerLastSyncedAt_DefaultNil(t *testing.T) {
+	s := newTestStore(t)
+
+	if err := s.SavePeer(&localstore.Peer{ID: "u1", ServerURL: "https://a.example.com", TrustDepth: 1}); err != nil {
+		t.Fatalf("SavePeer failed: %v", err)
+	}
+
+	got, err := s.GetPeer("u1")
+	if err != nil {
+		t.Fatalf("GetPeer failed: %v", err)
+	}
+	if got.LastSyncedAt != nil {
+		t.Errorf("expected LastSyncedAt = nil for unsynced peer, got %v", got.LastSyncedAt)
+	}
+}
+
+func TestSetPeerLastSyncedAt(t *testing.T) {
+	s := newTestStore(t)
+
+	if err := s.SavePeer(&localstore.Peer{ID: "u1", ServerURL: "https://a.example.com", TrustDepth: 1}); err != nil {
+		t.Fatalf("SavePeer failed: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.SetPeerLastSyncedAt("u1", now); err != nil {
+		t.Fatalf("SetPeerLastSyncedAt failed: %v", err)
+	}
+
+	got, err := s.GetPeer("u1")
+	if err != nil {
+		t.Fatalf("GetPeer failed: %v", err)
+	}
+	if got.LastSyncedAt == nil {
+		t.Fatalf("expected LastSyncedAt to be set")
+	}
+	if !got.LastSyncedAt.Equal(now) {
+		t.Errorf("expected LastSyncedAt = %v, got %v", now, got.LastSyncedAt)
+	}
+}
+
+func TestSavePeer_PreservesLastSyncedAt(t *testing.T) {
+	s := newTestStore(t)
+
+	if err := s.SavePeer(&localstore.Peer{ID: "u1", ServerURL: "https://a.example.com", TrustDepth: 1}); err != nil {
+		t.Fatalf("SavePeer failed: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.SetPeerLastSyncedAt("u1", now); err != nil {
+		t.Fatalf("SetPeerLastSyncedAt failed: %v", err)
+	}
+
+	// Re-save peer (e.g., user updates trust depth) — sync timestamp must survive.
+	if err := s.SavePeer(&localstore.Peer{ID: "u1", ServerURL: "https://a.example.com", TrustDepth: 3}); err != nil {
+		t.Fatalf("SavePeer failed: %v", err)
+	}
+
+	got, err := s.GetPeer("u1")
+	if err != nil {
+		t.Fatalf("GetPeer failed: %v", err)
+	}
+	if got.LastSyncedAt == nil || !got.LastSyncedAt.Equal(now) {
+		t.Errorf("expected LastSyncedAt preserved across SavePeer, got %v", got.LastSyncedAt)
+	}
+	if got.TrustDepth != 3 {
+		t.Errorf("expected TrustDepth=3 after re-save, got %d", got.TrustDepth)
+	}
+}
+
+func TestServerLastSyncedAt(t *testing.T) {
+	s := newTestStore(t)
+
+	srv := &localstore.Server{URL: "https://tillit.example.com", UserID: "u1"}
+	if err := s.SaveServer(srv); err != nil {
+		t.Fatalf("SaveServer failed: %v", err)
+	}
+
+	got, err := s.GetServer(srv.URL)
+	if err != nil {
+		t.Fatalf("GetServer failed: %v", err)
+	}
+	if got.LastSyncedAt != nil {
+		t.Errorf("expected LastSyncedAt=nil for new server, got %v", got.LastSyncedAt)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.SetServerLastSyncedAt(srv.URL, now); err != nil {
+		t.Fatalf("SetServerLastSyncedAt failed: %v", err)
+	}
+
+	got, err = s.GetServer(srv.URL)
+	if err != nil {
+		t.Fatalf("GetServer failed: %v", err)
+	}
+	if got.LastSyncedAt == nil || !got.LastSyncedAt.Equal(now) {
+		t.Errorf("expected LastSyncedAt = %v, got %v", now, got.LastSyncedAt)
+	}
+
+	// Re-saving server (e.g. updating alias) must preserve sync timestamp.
+	srv.Alias = "primary"
+	if err := s.SaveServer(srv); err != nil {
+		t.Fatalf("SaveServer failed: %v", err)
+	}
+	got, err = s.GetServer(srv.URL)
+	if err != nil {
+		t.Fatalf("GetServer failed: %v", err)
+	}
+	if got.LastSyncedAt == nil || !got.LastSyncedAt.Equal(now) {
+		t.Errorf("expected LastSyncedAt preserved across SaveServer, got %v", got.LastSyncedAt)
+	}
+	if got.Alias != "primary" {
+		t.Errorf("expected alias=primary, got %q", got.Alias)
 	}
 }
 

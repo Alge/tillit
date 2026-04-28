@@ -7,7 +7,6 @@ import (
 
 	"github.com/Alge/tillit/db/dberrors"
 	"github.com/Alge/tillit/models"
-	"github.com/Alge/tillit/responsetypes"
 )
 
 
@@ -27,36 +26,6 @@ func (c *SqliteConnector) GetUser(id string) (*models.User, error) {
 		return nil, err
 	}
 	return u, nil
-}
-
-func (c *SqliteConnector) GetUserList(page int, size int) (*responsetypes.PaginatedResponse[*models.User], error) {
-	stmt, err := c.Database.Prepare("SELECT id, username, pubkey, algorithm FROM users LIMIT ? OFFSET ?")
-	if err != nil {
-		return nil, fmt.Errorf("failed preparing statement: %w", err)
-	}
-	defer stmt.Close()
-
-	rows, err := stmt.Query(size, (page-1)*size)
-	if err != nil {
-		return nil, fmt.Errorf("failed fetching users from database: %w", err)
-	}
-	defer rows.Close()
-
-	res := &responsetypes.PaginatedResponse[*models.User]{
-		Page: page,
-		Data: []*models.User{},
-	}
-
-	for rows.Next() {
-		u := &models.User{}
-		if err := rows.Scan(&u.ID, &u.Username, &u.PubKey, &u.Algorithm); err != nil {
-			return nil, fmt.Errorf("failed scanning user row: %w", err)
-		}
-		res.Data = append(res.Data, u)
-	}
-
-	res.Size = len(res.Data)
-	return res, nil
 }
 
 func (c *SqliteConnector) CreateUser(u *models.User) error {

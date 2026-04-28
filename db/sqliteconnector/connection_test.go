@@ -2,6 +2,7 @@ package sqliteconnector
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Alge/tillit/models"
 )
@@ -90,5 +91,65 @@ func TestGetConnectionNotFound(t *testing.T) {
 	_, err := c.GetConnection("nonexistent")
 	if err == nil {
 		t.Error("expected error for nonexistent connection")
+	}
+}
+
+func TestGetUserPublicConnections_FiltersPrivateAndRevoked(t *testing.T) {
+	c := newTestConnector(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	conns := []*models.Connection{
+		{ID: "c-pub", Owner: "alice", OtherID: "bob", Public: true, Trust: true, CreatedAt: now},
+		{ID: "c-priv", Owner: "alice", OtherID: "carol", Public: false, Trust: true, CreatedAt: now},
+		{ID: "c-rev", Owner: "alice", OtherID: "dave", Public: true, Trust: true, CreatedAt: now},
+	}
+	for _, conn := range conns {
+		if err := c.CreateConnection(conn); err != nil {
+			t.Fatalf("CreateConnection failed: %v", err)
+		}
+	}
+	if err := c.RevokeConnection("c-rev", now); err != nil {
+		t.Fatalf("RevokeConnection failed: %v", err)
+	}
+
+	got, err := c.GetUserPublicConnections("alice", nil)
+	if err != nil {
+		t.Fatalf("GetUserPublicConnections failed: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "c-pub" {
+		t.Errorf("expected only [c-pub], got %v", got)
+	}
+}
+
+func TestGetUserPublicConnections_SinceFilter(t *testing.T) {
+	c := newTestConnector(t)
+	t1 := time.Now().UTC().Truncate(time.Second)
+	t2 := t1.Add(time.Minute)
+
+	if err := c.CreateConnection(&models.Connection{
+		ID: "c-old", Owner: "alice", OtherID: "bob", Public: true, Trust: true, CreatedAt: t1,
+	}); err != nil {
+		t.Fatalf("CreateConnection failed: %v", err)
+	}
+	if err := c.CreateConnection(&models.Connection{
+		ID: "c-new", Owner: "alice", OtherID: "carol", Public: true, Trust: true, CreatedAt: t2,
+	}); err != nil {
+		t.Fatalf("CreateConnection failed: %v", err)
+	}
+
+	got, err := c.GetUserPublicConnections("alice", &t1)
+	if err != nil {
+		t.Fatalf("GetUserPublicConnections failed: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "c-new" {
+		t.Errorf("expected only [c-new], got %+v", got)
+	}
+}
+
+func TestRevokeConnection_NotFound(t *testing.T) {
+	c := newTestConnector(t)
+	err := c.RevokeConnection("nope", time.Now())
+	if err == nil {
+		t.Error("expected error for unknown connection")
 	}
 }

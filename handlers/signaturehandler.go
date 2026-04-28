@@ -10,7 +10,6 @@ import (
 	"github.com/Alge/tillit/db"
 	"github.com/Alge/tillit/db/dberrors"
 	"github.com/Alge/tillit/models"
-	"github.com/google/uuid"
 )
 
 func processRevocation(database db.DatabaseConnector, payload *models.Payload, uploadedAt time.Time) {
@@ -36,6 +35,7 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 		}
 
 		type sigInput struct {
+			ID        string `json:"id"`
 			Payload   string `json:"payload"`
 			Algorithm string `json:"algorithm"`
 			Sig       string `json:"sig"`
@@ -43,6 +43,10 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 		input, err := decode[sigInput](r)
 		if err != nil {
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		if input.ID == "" {
+			http.Error(w, "Missing signature id", http.StatusBadRequest)
 			return
 		}
 
@@ -66,7 +70,7 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 
 		uploadedAt := time.Now().UTC()
 		sig := &models.Signature{
-			ID:         uuid.NewString(),
+			ID:         input.ID,
 			Signer:     userID,
 			Payload:    input.Payload,
 			Algorithm:  input.Algorithm,

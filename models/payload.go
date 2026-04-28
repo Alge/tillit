@@ -8,8 +8,10 @@ import (
 type PayloadType string
 
 const (
-	PayloadTypeDecision   PayloadType = "decision"
-	PayloadTypeRevocation PayloadType = "revocation"
+	PayloadTypeDecision             PayloadType = "decision"
+	PayloadTypeRevocation           PayloadType = "revocation"
+	PayloadTypeConnection           PayloadType = "connection"
+	PayloadTypeConnectionRevocation PayloadType = "connection_revocation"
 )
 
 type DecisionLevel string
@@ -35,6 +37,12 @@ type Payload struct {
 	Level     DecisionLevel `json:"level,omitempty"`
 	Reason    string        `json:"reason,omitempty"`
 	TargetID  string        `json:"target_id,omitempty"`
+
+	// connection fields
+	OtherID      string `json:"other_id,omitempty"`
+	Public       bool   `json:"public,omitempty"`
+	Trust        bool   `json:"trust,omitempty"`
+	TrustExtends int    `json:"trust_extends,omitempty"`
 }
 
 func ParsePayload(data []byte) (*Payload, error) {
@@ -70,6 +78,14 @@ func (p *Payload) Validate() error {
 	case PayloadTypeRevocation:
 		if p.TargetID == "" {
 			return fmt.Errorf("target_id is required for revocation payloads")
+		}
+	case PayloadTypeConnection:
+		if p.OtherID == "" {
+			return fmt.Errorf("other_id is required for connection payloads")
+		}
+	case PayloadTypeConnectionRevocation:
+		if p.TargetID == "" {
+			return fmt.Errorf("target_id is required for connection_revocation payloads")
 		}
 	default:
 		return fmt.Errorf("unknown payload type %q", p.Type)

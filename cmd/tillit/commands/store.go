@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	tillit_crypto "github.com/Alge/tillit/crypto"
 	"github.com/Alge/tillit/localstore"
@@ -42,6 +43,32 @@ func activeSignerAndID(s *localstore.Store) (tillit_crypto.Signer, string, error
 	hash := sha256.Sum256(signer.PublicKey())
 	userID := base64.RawURLEncoding.EncodeToString(hash[:])
 	return signer, userID, nil
+}
+
+// fetchAndCachePubkey GETs the user from the server, verifies that
+// sha256(pubkey) matches the expected ID, and caches the public key so
+// subsequent signatures from this user can be verified offline.
+func fetchAndCachePubkey(s *localstore.Store, serverURL, userID string) error {
+	u, err := fetchUser(serverURL, userID)
+	if err != nil {
+		return err
+	}
+	pubBytes, err := base64.RawURLEncoding.DecodeString(u.PubKey)
+	if err != nil {
+		return fmt.Errorf("server returned invalid pubkey encoding: %w", err)
+	}
+	hash := sha256.Sum256(pubBytes)
+	expected := base64.RawURLEncoding.EncodeToString(hash[:])
+	if expected != userID {
+		return fmt.Errorf("server returned pubkey whose hash %s does not match requested ID %s", expected, userID)
+	}
+	return s.SaveCachedUser(&localstore.CachedUser{
+		ID:        u.ID,
+		Username:  u.Username,
+		PubKey:    u.PubKey,
+		Algorithm: u.Algorithm,
+		FetchedAt: time.Now().UTC(),
+	})
 }
 
 func storeDir() (string, error) {

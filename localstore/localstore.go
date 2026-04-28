@@ -54,7 +54,16 @@ func (s *Store) migrate() error {
 	if err := s.migratePeers(); err != nil {
 		return err
 	}
-	return s.migrateCache()
+	if err := s.migrateCache(); err != nil {
+		return err
+	}
+	if err := s.migrateCachedConnections(); err != nil {
+		return err
+	}
+	if err := s.migrateCachedUsers(); err != nil {
+		return err
+	}
+	return s.migratePushState()
 }
 
 func (s *Store) SaveKey(k *Key) error {

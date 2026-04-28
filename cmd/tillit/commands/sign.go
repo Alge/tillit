@@ -1,10 +1,10 @@
 package commands
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/Alge/tillit/localstore"
 	"github.com/Alge/tillit/models"
 )
 
@@ -61,41 +61,26 @@ func Sign(args []string) error {
 		Level:     models.DecisionLevel(level),
 		Reason:    reason,
 	}
-	if err := payload.Validate(); err != nil {
-		return fmt.Errorf("invalid payload: %w", err)
-	}
-
-	payloadBytes, err := json.Marshal(payload)
+	signed, err := signPayload(signer, payload)
 	if err != nil {
 		return err
 	}
-	sigBytes, err := signer.Sign(payloadBytes)
-	if err != nil {
-		return fmt.Errorf("signing failed: %w", err)
+
+	now := time.Now().UTC()
+	if err := s.SaveCachedSignature(&localstore.CachedSignature{
+		ID:         signed.ID,
+		Signer:     userID,
+		Payload:    signed.Payload,
+		Algorithm:  signed.Algorithm,
+		Sig:        signed.Sig,
+		UploadedAt: now,
+		FetchedAt:  now,
+	}); err != nil {
+		return fmt.Errorf("failed saving signature: %w", err)
 	}
 
-	req := sigUploadRequest{
-		Payload:   string(payloadBytes),
-		Algorithm: signer.Algorithm(),
-		Sig:       base64.RawURLEncoding.EncodeToString(sigBytes),
-	}
-
-	servers, err := s.ListServers()
-	if err != nil {
-		return fmt.Errorf("failed listing servers: %w", err)
-	}
-	if len(servers) == 0 {
-		return fmt.Errorf("no servers registered — run 'tillit register <server_url>' first")
-	}
-
-	for _, srv := range servers {
-		result, err := uploadSignature(srv.URL, userID, req)
-		if err != nil {
-			fmt.Printf("  [%s] failed: %v\n", srv.URL, err)
-			continue
-		}
-		fmt.Printf("Published to %s (id: %s)\n", srv.URL, result.ID)
-	}
+	fmt.Printf("Signed %s/%s@%s as %s (id: %s)\n", ecosystem, packageID, version, level, signed.ID)
+	fmt.Println("Run 'tillit publish' to push it to your registered servers.")
 	return nil
 }
 
@@ -121,37 +106,34 @@ func Revoke(args []string) error {
 		Signer:   userID,
 		TargetID: targetID,
 	}
-
-	payloadBytes, err := json.Marshal(payload)
+	signed, err := signPayload(signer, payload)
 	if err != nil {
 		return err
 	}
-	sigBytes, err := signer.Sign(payloadBytes)
-	if err != nil {
-		return fmt.Errorf("signing failed: %w", err)
+
+	now := time.Now().UTC()
+	if err := s.SaveCachedSignature(&localstore.CachedSignature{
+		ID:         signed.ID,
+		Signer:     userID,
+		Payload:    signed.Payload,
+		Algorithm:  signed.Algorithm,
+		Sig:        signed.Sig,
+		UploadedAt: now,
+		FetchedAt:  now,
+	}); err != nil {
+		return fmt.Errorf("failed saving revocation: %w", err)
 	}
 
-	req := sigUploadRequest{
-		Payload:   string(payloadBytes),
-		Algorithm: signer.Algorithm(),
-		Sig:       base64.RawURLEncoding.EncodeToString(sigBytes),
-	}
-
-	servers, err := s.ListServers()
-	if err != nil {
-		return fmt.Errorf("failed listing servers: %w", err)
-	}
-	if len(servers) == 0 {
-		return fmt.Errorf("no servers registered — run 'tillit register <server_url>' first")
-	}
-
-	for _, srv := range servers {
-		result, err := uploadSignature(srv.URL, userID, req)
-		if err != nil {
-			fmt.Printf("  [%s] failed: %v\n", srv.URL, err)
-			continue
+	// Mark the locally-cached target as revoked too, so check works offline.
+	if existing, err := s.GetCachedSignature(targetID); err == nil {
+		existing.Revoked = true
+		existing.RevokedAt = &now
+		if err := s.SaveCachedSignature(existing); err != nil {
+			fmt.Printf("warning: failed marking target %s revoked locally: %v\n", targetID, err)
 		}
-		fmt.Printf("Revocation published to %s (id: %s)\n", srv.URL, result.ID)
 	}
+
+	fmt.Printf("Revoked %s (id: %s)\n", targetID, signed.ID)
+	fmt.Println("Run 'tillit publish' to push it to your registered servers.")
 	return nil
 }

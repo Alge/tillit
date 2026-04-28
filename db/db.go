@@ -7,7 +7,6 @@ import (
 
 	"github.com/Alge/tillit/db/sqliteconnector"
 	"github.com/Alge/tillit/models"
-	"github.com/Alge/tillit/responsetypes"
 )
 
 type DatabaseConnector interface {
@@ -16,12 +15,13 @@ type DatabaseConnector interface {
 	GetUser(id string) (*models.User, error)
 	CreateUser(u *models.User) error
 	DeleteUser(u *models.User) error
-	GetUserList(page int, size int) (*responsetypes.PaginatedResponse[*models.User], error)
 
 	GetConnection(id string) (*models.Connection, error)
 	GetUserConnections(userID string) ([]*models.Connection, error)
+	GetUserPublicConnections(userID string, since *time.Time) ([]*models.Connection, error)
 	CreateConnection(u *models.Connection) error
 	DeleteConnection(u *models.Connection) error
+	RevokeConnection(id string, at time.Time) error
 
 	GetSignature(id string) (*models.Signature, error)
 	GetUserSignatures(signerID string, since *time.Time) ([]*models.Signature, error)

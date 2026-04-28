@@ -28,8 +28,8 @@ func main() {
 		err = commands.Trust(args)
 	case "distrust":
 		err = commands.Distrust(args)
-	case "untrust":
-		err = commands.Untrust(args)
+	case "forget":
+		err = commands.Forget(args)
 	case "peers":
 		err = commands.TrustList(args)
 	case "sign":
@@ -40,6 +40,8 @@ func main() {
 		err = commands.Sync(args)
 	case "publish":
 		err = commands.Publish(args)
+	case "status":
+		err = commands.Status(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -65,11 +67,12 @@ commands:
   trust <id@url> [--depth N] [--public] [--veto-only]
                               add or update a trusted peer
   distrust <id@url>           explicitly distrust a peer (blocks transitive trust)
-  untrust <id@url>            remove a peer entirely
+  forget <id@url>             remove a peer entirely (revokes any published trust connection)
   peers                       list all configured peers
   sign <ecosystem> <pkg> <version> --level <allowed|vetted|rejected> [--reason "..."]
                               sign and publish a vetting decision
   revoke <signature_id>       revoke a previously published decision
   sync                        pull signatures from all trusted peers into local cache
-  publish                     push any locally-cached signatures to registered servers`)
+  publish                     push any locally-cached signatures to registered servers
+  status                      show pending pushes and last-sync time per registered server`)
 }

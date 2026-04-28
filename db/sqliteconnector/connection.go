@@ -4,25 +4,19 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Alge/tillit/db/dberrors"
 	"github.com/Alge/tillit/models"
 )
 
-func (c *SqliteConnector) GetConnection(id string) (*models.Connection, error) {
-	stmt, err := c.Database.Prepare(`
-		SELECT id, owner, other_id, public, trust, trust_extends
-		FROM connections WHERE id = ?`)
-	if err != nil {
-		return nil, fmt.Errorf("failed preparing statement: %w", err)
-	}
-	defer stmt.Close()
+const connectionColumns = `id, owner, other_id, public, trust, trust_extends,
+	payload, algorithm, sig, created_at, revoked, revoked_at`
 
-	conn := &models.Connection{}
-	err = stmt.QueryRow(id).Scan(
-		&conn.ID, &conn.Owner, &conn.OtherID,
-		&conn.Public, &conn.Trust, &conn.TrustExtends,
-	)
+func (c *SqliteConnector) GetConnection(id string) (*models.Connection, error) {
+	row := c.Database.QueryRow(
+		`SELECT `+connectionColumns+` FROM connections WHERE id = ?`, id)
+	conn, err := scanConnection(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, dberrors.NewObjectNotFoundError("no such connection")
@@ -33,15 +27,23 @@ func (c *SqliteConnector) GetConnection(id string) (*models.Connection, error) {
 }
 
 func (c *SqliteConnector) GetUserConnections(userID string) ([]*models.Connection, error) {
-	stmt, err := c.Database.Prepare(`
-		SELECT id, owner, other_id, public, trust, trust_extends
-		FROM connections WHERE owner = ?`)
-	if err != nil {
-		return nil, fmt.Errorf("failed preparing statement: %w", err)
-	}
-	defer stmt.Close()
+	return c.queryConnections(`WHERE owner = ?`, userID)
+}
 
-	rows, err := stmt.Query(userID)
+// GetUserPublicConnections returns connections owned by userID that are
+// public=1 and not revoked, optionally filtered to those created after `since`.
+func (c *SqliteConnector) GetUserPublicConnections(userID string, since *time.Time) ([]*models.Connection, error) {
+	if since != nil {
+		return c.queryConnections(
+			`WHERE owner = ? AND public = 1 AND revoked = 0 AND created_at > ? ORDER BY created_at ASC`,
+			userID, since.UTC().Format(time.RFC3339))
+	}
+	return c.queryConnections(
+		`WHERE owner = ? AND public = 1 AND revoked = 0 ORDER BY created_at ASC`, userID)
+}
+
+func (c *SqliteConnector) queryConnections(where string, args ...any) ([]*models.Connection, error) {
+	rows, err := c.Database.Query(`SELECT `+connectionColumns+` FROM connections `+where, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed querying connections: %w", err)
 	}
@@ -49,11 +51,8 @@ func (c *SqliteConnector) GetUserConnections(userID string) ([]*models.Connectio
 
 	var conns []*models.Connection
 	for rows.Next() {
-		conn := &models.Connection{}
-		if err := rows.Scan(
-			&conn.ID, &conn.Owner, &conn.OtherID,
-			&conn.Public, &conn.Trust, &conn.TrustExtends,
-		); err != nil {
+		conn, err := scanConnection(rows)
+		if err != nil {
 			return nil, fmt.Errorf("failed scanning connection row: %w", err)
 		}
 		conns = append(conns, conn)
@@ -62,48 +61,90 @@ func (c *SqliteConnector) GetUserConnections(userID string) ([]*models.Connectio
 }
 
 func (c *SqliteConnector) CreateConnection(conn *models.Connection) error {
-	stmt, err := c.Database.Prepare(`
-		INSERT INTO connections (id, owner, other_id, public, trust, trust_extends)
-		VALUES (?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("failed preparing statement: %w", err)
+	if conn.CreatedAt.IsZero() {
+		conn.CreatedAt = time.Now().UTC()
 	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(
+	_, err := c.Database.Exec(
+		`INSERT INTO connections (`+connectionColumns+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
 		conn.ID, conn.Owner, conn.OtherID,
 		conn.Public, conn.Trust, conn.TrustExtends,
+		conn.Payload, conn.Algorithm, conn.Sig,
+		conn.CreatedAt.UTC().Format(time.RFC3339),
 	)
 	return err
 }
 
 func (c *SqliteConnector) DeleteConnection(conn *models.Connection) error {
-	stmt, err := c.Database.Prepare(`DELETE FROM connections WHERE id = ?`)
-	if err != nil {
-		return fmt.Errorf("failed preparing statement: %w", err)
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(conn.ID)
+	_, err := c.Database.Exec(`DELETE FROM connections WHERE id = ?`, conn.ID)
 	return err
 }
 
-func (c *SqliteConnector) CreateConnectionTable() error {
-	stmt, err := c.Database.Prepare(`
-		CREATE TABLE IF NOT EXISTS connections (
-			id           TEXT PRIMARY KEY,
-			owner        TEXT NOT NULL,
-			other_id     TEXT NOT NULL,
-			public       INTEGER NOT NULL DEFAULT 0,
-			trust        INTEGER NOT NULL DEFAULT 0,
-			trust_extends INTEGER NOT NULL DEFAULT 0,
-			UNIQUE(owner, other_id)
-		);`)
+// RevokeConnection marks a connection as revoked at the given time.
+func (c *SqliteConnector) RevokeConnection(id string, at time.Time) error {
+	res, err := c.Database.Exec(
+		`UPDATE connections SET revoked = 1, revoked_at = ? WHERE id = ?`,
+		at.UTC().Format(time.RFC3339), id,
+	)
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return dberrors.NewObjectNotFoundError("no such connection")
+	}
+	return nil
+}
 
-	_, err = stmt.Exec()
+func (c *SqliteConnector) CreateConnectionTable() error {
+	_, err := c.Database.Exec(`
+		CREATE TABLE IF NOT EXISTS connections (
+			id            TEXT PRIMARY KEY,
+			owner         TEXT NOT NULL,
+			other_id      TEXT NOT NULL,
+			public        INTEGER NOT NULL DEFAULT 0,
+			trust         INTEGER NOT NULL DEFAULT 0,
+			trust_extends INTEGER NOT NULL DEFAULT 0,
+			payload       TEXT NOT NULL DEFAULT '',
+			algorithm     TEXT NOT NULL DEFAULT '',
+			sig           TEXT NOT NULL DEFAULT '',
+			created_at    TEXT NOT NULL DEFAULT '',
+			revoked       INTEGER NOT NULL DEFAULT 0,
+			revoked_at    TEXT
+		);`)
 	return err
+}
+
+func scanConnection(row interface {
+	Scan(dest ...any) error
+}) (*models.Connection, error) {
+	conn := &models.Connection{}
+	var createdAtStr string
+	var revokedAtStr sql.NullString
+	if err := row.Scan(
+		&conn.ID, &conn.Owner, &conn.OtherID,
+		&conn.Public, &conn.Trust, &conn.TrustExtends,
+		&conn.Payload, &conn.Algorithm, &conn.Sig,
+		&createdAtStr, &conn.Revoked, &revokedAtStr,
+	); err != nil {
+		return nil, err
+	}
+	if createdAtStr != "" {
+		t, err := time.Parse(time.RFC3339, createdAtStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed parsing created_at: %w", err)
+		}
+		conn.CreatedAt = t
+	}
+	if revokedAtStr.Valid {
+		t, err := time.Parse(time.RFC3339, revokedAtStr.String)
+		if err != nil {
+			return nil, fmt.Errorf("failed parsing revoked_at: %w", err)
+		}
+		conn.RevokedAt = &t
+	}
+	return conn, nil
 }
