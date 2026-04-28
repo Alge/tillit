@@ -62,7 +62,7 @@ commands:
   key show <name>             show the public key for a named key
   key use <name>              set the active key
   register <url> [alias]      register active key on a server
-  trust <id@url> [--depth N] [--delegate]
+  trust <id@url> [--depth N] [--public]
                               add or update a trusted peer
   distrust <id@url>           explicitly distrust a peer (blocks transitive trust)
   untrust <id@url>            remove a peer entirely

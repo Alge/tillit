@@ -38,13 +38,12 @@ func (u *User) Verifier() (crypto.Verifier, error) {
 	return crypto.NewVerifier(u.Algorithm, pubBytes)
 }
 
-func (u *User) Connect(other *User, public bool, trust bool, delegate bool, trustExtends int) *Connection {
+func (u *User) Connect(other *User, public bool, trust bool, trustExtends int) *Connection {
 	return &Connection{
 		Owner:        u.ID,
 		OtherID:      other.ID,
 		Public:       public,
 		Trust:        trust,
-		Delegate:     delegate,
 		TrustExtends: trustExtends,
 	}
 }

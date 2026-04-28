@@ -16,7 +16,7 @@ type Peer struct {
 	ID         string // peer's user ID (SHA-256 pubkey hash)
 	ServerURL  string
 	TrustDepth int
-	Delegate   bool
+	Public   bool
 	Distrusted bool
 }
 
@@ -31,7 +31,7 @@ func (s *Store) migratePeers() error {
 			id          TEXT PRIMARY KEY,
 			server_url  TEXT NOT NULL,
 			trust_depth INTEGER NOT NULL DEFAULT 1,
-			delegate    INTEGER NOT NULL DEFAULT 0,
+			public    INTEGER NOT NULL DEFAULT 0,
 			distrusted  INTEGER NOT NULL DEFAULT 0
 		);`)
 	return err
@@ -80,11 +80,11 @@ func (s *Store) ListServers() ([]*Server, error) {
 
 func (s *Store) SavePeer(p *Peer) error {
 	_, err := s.db.Exec(
-		`INSERT INTO peers (id, server_url, trust_depth, delegate, distrusted) VALUES (?, ?, ?, ?, ?)
+		`INSERT INTO peers (id, server_url, trust_depth, public, distrusted) VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET server_url=excluded.server_url,
-		 trust_depth=excluded.trust_depth, delegate=excluded.delegate,
+		 trust_depth=excluded.trust_depth, public=excluded.public,
 		 distrusted=excluded.distrusted`,
-		p.ID, p.ServerURL, p.TrustDepth, p.Delegate, p.Distrusted,
+		p.ID, p.ServerURL, p.TrustDepth, p.Public, p.Distrusted,
 	)
 	return err
 }
@@ -92,8 +92,8 @@ func (s *Store) SavePeer(p *Peer) error {
 func (s *Store) GetPeer(id string) (*Peer, error) {
 	p := &Peer{}
 	err := s.db.QueryRow(
-		`SELECT id, server_url, trust_depth, delegate, distrusted FROM peers WHERE id = ?`, id,
-	).Scan(&p.ID, &p.ServerURL, &p.TrustDepth, &p.Delegate, &p.Distrusted)
+		`SELECT id, server_url, trust_depth, public, distrusted FROM peers WHERE id = ?`, id,
+	).Scan(&p.ID, &p.ServerURL, &p.TrustDepth, &p.Public, &p.Distrusted)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("peer %q not found", id)
@@ -105,7 +105,7 @@ func (s *Store) GetPeer(id string) (*Peer, error) {
 
 func (s *Store) ListPeers() ([]*Peer, error) {
 	rows, err := s.db.Query(
-		`SELECT id, server_url, trust_depth, delegate, distrusted FROM peers ORDER BY id`)
+		`SELECT id, server_url, trust_depth, public, distrusted FROM peers ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (s *Store) ListPeers() ([]*Peer, error) {
 	var peers []*Peer
 	for rows.Next() {
 		p := &Peer{}
-		if err := rows.Scan(&p.ID, &p.ServerURL, &p.TrustDepth, &p.Delegate, &p.Distrusted); err != nil {
+		if err := rows.Scan(&p.ID, &p.ServerURL, &p.TrustDepth, &p.Public, &p.Distrusted); err != nil {
 			return nil, err
 		}
 		peers = append(peers, p)

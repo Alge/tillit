@@ -58,7 +58,7 @@ func TestSaveAndGetPeer(t *testing.T) {
 		ID:           "abc123",
 		ServerURL:    "https://tillit.example.com",
 		TrustDepth:   2,
-		Delegate:     true,
+		Public:     true,
 		Distrusted:   false,
 	}
 	if err := s.SavePeer(peer); err != nil {
@@ -70,7 +70,7 @@ func TestSaveAndGetPeer(t *testing.T) {
 		t.Fatalf("GetPeer failed: %v", err)
 	}
 	if got.ID != peer.ID || got.ServerURL != peer.ServerURL ||
-		got.TrustDepth != peer.TrustDepth || got.Delegate != peer.Delegate ||
+		got.TrustDepth != peer.TrustDepth || got.Public != peer.Public ||
 		got.Distrusted != peer.Distrusted {
 		t.Errorf("got %+v, want %+v", got, peer)
 	}

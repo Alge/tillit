@@ -9,7 +9,6 @@ type Connection struct {
 	Public       bool   `json:"public"`
 	Trust        bool   `json:"trust"`
 	TrustExtends int    `json:"trust_extends"`
-	Delegate     bool   `json:"delegate"`
 }
 
 func (c Connection) String() string {

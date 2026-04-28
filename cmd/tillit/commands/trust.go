@@ -18,9 +18,9 @@ func parsePeer(arg string) (id, serverURL string, err error) {
 }
 
 func Trust(args []string) error {
-	// usage: tillit trust <userID@server_url> [--depth N] [--delegate]
+	// usage: tillit trust <userID@server_url> [--depth N] [--share]
 	if len(args) == 0 {
-		return fmt.Errorf("usage: tillit trust <userID@server_url> [--depth N] [--delegate]")
+		return fmt.Errorf("usage: tillit trust <userID@server_url> [--depth N] [--share]")
 	}
 
 	id, serverURL, err := parsePeer(args[0])
@@ -29,7 +29,7 @@ func Trust(args []string) error {
 	}
 
 	depth := 1
-	delegate := false
+	public := false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--depth":
@@ -42,8 +42,8 @@ func Trust(args []string) error {
 				return fmt.Errorf("--depth must be a non-negative integer")
 			}
 			depth = d
-		case "--delegate":
-			delegate = true
+		case "--share":
+			public = true
 		default:
 			return fmt.Errorf("unknown flag: %s", args[i])
 		}
@@ -59,15 +59,15 @@ func Trust(args []string) error {
 		ID:         id,
 		ServerURL:  serverURL,
 		TrustDepth: depth,
-		Delegate:   delegate,
+		Public:     public,
 		Distrusted: false,
 	}); err != nil {
 		return fmt.Errorf("failed saving peer: %w", err)
 	}
 
 	fmt.Printf("Trusting %s@%s (depth=%d", id, serverURL, depth)
-	if delegate {
-		fmt.Print(", delegate=true")
+	if public {
+		fmt.Print(", public")
 	}
 	fmt.Println(")")
 	return nil
@@ -147,8 +147,8 @@ func TrustList(args []string) error {
 			fmt.Printf("  DISTRUST %s@%s\n", p.ID, p.ServerURL)
 		} else {
 			del := ""
-			if p.Delegate {
-				del = " delegate"
+			if p.Public {
+				del = " public"
 			}
 			fmt.Printf("  trust    %s@%s (depth=%d%s)\n", p.ID, p.ServerURL, p.TrustDepth, del)
 		}

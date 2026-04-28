@@ -15,7 +15,6 @@ func TestCreateAndGetConnection(t *testing.T) {
 		OtherID:      "user-b",
 		Public:       true,
 		Trust:        true,
-		Delegate:     false,
 		TrustExtends: 2,
 	}
 
@@ -33,7 +32,6 @@ func TestCreateAndGetConnection(t *testing.T) {
 		got.OtherID != conn.OtherID ||
 		got.Public != conn.Public ||
 		got.Trust != conn.Trust ||
-		got.Delegate != conn.Delegate ||
 		got.TrustExtends != conn.TrustExtends {
 		t.Errorf("got %+v, want %+v", got, conn)
 	}
