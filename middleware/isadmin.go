@@ -9,14 +9,11 @@ import (
 
 func IsAdmin(next http.Handler, database db.DatabaseConnector) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		_, ok := requestdata.GetUser(r)
-
-		if !ok {
+		user, ok := requestdata.GetUser(r)
+		if !ok || !user.IsAdmin {
 			writeUnauthed(w)
 			return
 		}
-
 		next.ServeHTTP(w, r)
 	})
 }

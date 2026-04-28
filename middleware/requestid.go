@@ -13,7 +13,7 @@ func AddRequestID(next http.Handler) http.Handler {
 
 		rID, err := uuid.NewRandom()
 		if err != nil {
-			log.Printf("Failed generating UUID: %w", err)
+			log.Printf("Failed generating UUID: %v", err)
 		}
 		r = requestdata.WithRequestID(r, rID)
 
