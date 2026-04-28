@@ -44,6 +44,8 @@ func main() {
 		err = commands.Status(args)
 	case "query":
 		err = commands.Query(args)
+	case "check":
+		err = commands.Check(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -68,8 +70,8 @@ commands:
   register <url> [alias]      register active key on a server
   trust <id@url> [--depth N] [--public] [--veto-only]
                               add or update a trusted peer
-  distrust <id@url>           explicitly distrust a peer (blocks transitive trust)
-  forget <id@url>             remove a peer entirely (revokes any published trust connection)
+  distrust <id>               explicitly distrust a peer (blocks transitive trust)
+  forget <id>                 remove a peer entirely (revokes any published trust connection)
   peers                       list all configured peers
   sign <ecosystem> <pkg> <version> --level <allowed|vetted|rejected> [--reason "..."]
                               sign and publish a vetting decision
@@ -77,5 +79,6 @@ commands:
   sync                        pull signatures from all trusted peers into local cache
   publish                     push any locally-cached signatures to registered servers
   status                      show pending pushes and last-sync time per registered server
-  query <ecosystem> <pkg>     show trusted versions of a package, grouped by status`)
+  query <ecosystem> <pkg>     show trusted versions of a package, grouped by status
+  check <lockfile>            check every package in a lockfile against the trust graph`)
 }
