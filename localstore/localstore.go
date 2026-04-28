@@ -60,6 +60,9 @@ func (s *Store) migrate() error {
 	if err := s.migrateCachedConnections(); err != nil {
 		return err
 	}
+	if err := s.migrateCachedUsers(); err != nil {
+		return err
+	}
 	return s.migratePushState()
 }
 
