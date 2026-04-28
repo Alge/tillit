@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/Alge/tillit/resolver"
@@ -36,27 +37,40 @@ func Query(args []string) error {
 		return nil
 	}
 
+	versions := make([]string, 0, len(pv.Versions))
+	for v := range pv.Versions {
+		versions = append(versions, v)
+	}
+	cmp := versionComparatorFor(ecosystem)
+	sort.Slice(versions, func(i, j int) bool {
+		return cmp(versions[i], versions[j]) < 0
+	})
+
 	fmt.Printf("Versions for %s/%s:\n", ecosystem, packageID)
-	for _, g := range resolver.GroupVersions(pv) {
-		fmt.Printf("  %-22s %s%s\n", versionRange(g), g.Status, decisionSummary(g))
+	for _, v := range versions {
+		ver := pv.Versions[v]
+		fmt.Printf("  %-22s %s%s\n", v, ver.Status, decisionSummary(ver))
 	}
 	return nil
 }
 
-func versionRange(g resolver.VersionRange) string {
-	if g.From == g.To {
-		return g.From
+// versionComparatorFor returns the comparison function from the ecosystem's
+// adapter, falling back to the resolver's generic comparator when no
+// adapter is registered.
+func versionComparatorFor(ecosystem string) func(a, b string) int {
+	if a, ok := adapterForEcosystem(ecosystem); ok {
+		return a.CompareVersions
 	}
-	return g.From + " — " + g.To
+	return resolver.CompareVersions
 }
 
 // decisionSummary returns a short suffix listing the signers (and reasons,
 // when present) behind the verdict — enough context to understand why
 // without dumping the full structure.
-func decisionSummary(g resolver.VersionRange) string {
+func decisionSummary(v resolver.Verdict) string {
 	signers := map[string]bool{}
 	var reasons []string
-	for _, d := range g.Decisions {
+	for _, d := range v.Decisions {
 		signers[d.SignerID] = true
 		if d.Reason != "" {
 			reasons = append(reasons, d.Reason)
@@ -66,13 +80,13 @@ func decisionSummary(g resolver.VersionRange) string {
 		return ""
 	}
 
-	var names []string
+	names := make([]string, 0, len(signers))
 	for s := range signers {
 		names = append(names, shortID(s))
 	}
+	sort.Strings(names)
 	out := " (" + strings.Join(names, ", ")
 	if len(reasons) > 0 {
-		// Show first reason inline; trim if multiple.
 		first := reasons[0]
 		if len(first) > 60 {
 			first = first[:57] + "..."
@@ -86,7 +100,6 @@ func decisionSummary(g resolver.VersionRange) string {
 	return out
 }
 
-// shortID truncates a long pubkey-hash ID for display.
 func shortID(id string) string {
 	if len(id) <= 12 {
 		return id
