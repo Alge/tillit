@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -10,37 +9,36 @@ import (
 	"github.com/Alge/tillit/models"
 )
 
-func CreateUserHandler(database db.DatabaseConnector) func(w http.ResponseWriter, r *http.Request) {
-	return http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			type NewUserInput struct {
-				ID     string `json:"id"`
-				Username  string `json:"username"`
-				Publickey string `json:"public_key"`
-			}
+func CreateUserHandler(database db.DatabaseConnector) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		type NewUserInput struct {
+			ID        string `json:"id"`
+			Username  string `json:"username"`
+			PubKey    string `json:"public_key"`
+			Algorithm string `json:"algorithm"`
+		}
 
-			userInput, err := decode[NewUserInput](r)
-			if err != nil {
-				http.Error(w, "Invalid request body", http.StatusBadRequest)
-				return
-			}
+		userInput, err := decode[NewUserInput](r)
+		if err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
 
-			u := &models.User{
-				ID:       userInput.ID,
-				Username: userInput.Username,
-				PubKey:   userInput.Publickey,
-			}
+		u := &models.User{
+			ID:        userInput.ID,
+			Username:  userInput.Username,
+			PubKey:    userInput.PubKey,
+			Algorithm: userInput.Algorithm,
+		}
 
-			if err := database.CreateUser(u); err != nil {
-				log.Printf("Failed inserting user into database: %s", err)
-				http.Error(w, "Failed creating user", http.StatusInternalServerError)
-				return
-			}
+		if err := database.CreateUser(u); err != nil {
+			log.Printf("Failed inserting user into database: %s", err)
+			http.Error(w, "Failed creating user", http.StatusInternalServerError)
+			return
+		}
 
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(u)
-		},
-	)
+		encode(w, r, http.StatusCreated, u)
+	}
 }
 
 func GetUserIDHandler(database db.DatabaseConnector) func(w http.ResponseWriter, r *http.Request) {
