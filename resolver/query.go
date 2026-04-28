@@ -160,8 +160,13 @@ func (r *Resolver) collectMatching(viewer, ecosystem, packageID string) ([]sigIn
 			}
 			switch p.Type {
 			case models.PayloadTypeDecision:
+				d.Kind = KindExact
+				d.Version = p.Version
 				out = append(out, sigInfo{decision: d, exactVersion: p.Version})
 			case models.PayloadTypeDeltaDecision:
+				d.Kind = KindDelta
+				d.FromVersion = p.FromVersion
+				d.ToVersion = p.ToVersion
 				out = append(out, sigInfo{
 					decision: d, isDelta: true,
 					fromVersion: p.FromVersion, toVersion: p.ToVersion,
