@@ -6,6 +6,9 @@ import (
 	"github.com/Alge/tillit/localstore"
 )
 
+// Status prints a summary of the local store: the active key, peer
+// counts, cached data, and any registered servers with their sync /
+// pending-push state. Useful before any server is registered too.
 func Status(args []string) error {
 	if len(args) > 0 {
 		return fmt.Errorf("usage: tillit status")
@@ -17,33 +20,84 @@ func Status(args []string) error {
 	}
 	defer s.Close()
 
+	// Active key. Don't bail if absent — pre-init users still get a useful
+	// hint.
+	keyName, _ := s.GetActiveKey()
+	if keyName == "" {
+		fmt.Println("No active key. Run 'tillit init' to generate one.")
+		return nil
+	}
+	key, err := s.GetKey(keyName)
+	if err != nil {
+		return fmt.Errorf("failed reading active key: %w", err)
+	}
 	_, userID, err := activeSignerAndID(s)
 	if err != nil {
 		return err
 	}
 
-	servers, err := s.ListServers()
-	if err != nil {
-		return fmt.Errorf("failed listing servers: %w", err)
-	}
+	fmt.Printf("Active key: %s (%s)\n", key.Name, key.Algorithm)
+	fmt.Printf("User ID:    %s\n", userID)
+	fmt.Println()
 
-	myConns, err := s.GetCachedConnectionsBySigner(userID)
-	if err != nil {
-		return fmt.Errorf("failed reading cached connections: %w", err)
+	if err := printPeerSummary(s); err != nil {
+		return err
 	}
+	if err := printDataSummary(s, userID); err != nil {
+		return err
+	}
+	return printServerSummary(s, userID)
+}
+
+func printPeerSummary(s *localstore.Store) error {
+	peers, err := s.ListPeers()
+	if err != nil {
+		return fmt.Errorf("list peers: %w", err)
+	}
+	trusted, distrusted, vetoOnly := 0, 0, 0
+	for _, p := range peers {
+		switch {
+		case p.Distrusted:
+			distrusted++
+		case p.VetoOnly:
+			vetoOnly++
+		default:
+			trusted++
+		}
+	}
+	fmt.Printf("Peers: %d total (%d trusted, %d veto-only, %d distrusted)\n",
+		len(peers), trusted, vetoOnly, distrusted)
+	return nil
+}
+
+func printDataSummary(s *localstore.Store, userID string) error {
 	mySigs, err := s.GetCachedSignaturesBySigner(userID)
 	if err != nil {
-		return fmt.Errorf("failed reading cached signatures: %w", err)
+		return fmt.Errorf("read signatures: %w", err)
 	}
+	myConns, err := s.GetCachedConnectionsBySigner(userID)
+	if err != nil {
+		return fmt.Errorf("read connections: %w", err)
+	}
+	fmt.Printf("Local data: %d signature(s), %d connection(s) signed by you\n",
+		len(mySigs), len(myConns))
+	fmt.Println()
+	return nil
+}
 
+func printServerSummary(s *localstore.Store, userID string) error {
+	servers, err := s.ListServers()
+	if err != nil {
+		return fmt.Errorf("list servers: %w", err)
+	}
 	if len(servers) == 0 {
 		fmt.Println("No servers registered.")
-		if len(myConns)+len(mySigs) > 0 {
-			fmt.Printf("%d local connection(s), %d local signature(s) — register a server with 'tillit register' to publish.\n",
-				len(myConns), len(mySigs))
-		}
+		fmt.Println("Use 'tillit register <url>' to start publishing.")
 		return nil
 	}
+
+	myConns, _ := s.GetCachedConnectionsBySigner(userID)
+	mySigs, _ := s.GetCachedSignaturesBySigner(userID)
 
 	totalPending := 0
 	for _, srv := range servers {
@@ -73,7 +127,6 @@ func Status(args []string) error {
 			totalPending += pendingConns + pendingSigs
 		}
 	}
-
 	if totalPending > 0 {
 		fmt.Printf("\nRun 'tillit publish' to push %d pending item(s).\n", totalPending)
 	}
