@@ -174,6 +174,71 @@ func TestPayload_Validate_ConnectionRevocationMissingTarget(t *testing.T) {
 	}
 }
 
+func TestPayload_Validate_DiffDecision(t *testing.T) {
+	p := &models.Payload{
+		Type:        models.PayloadTypeDiffDecision,
+		Signer:      "abc",
+		Ecosystem:   "go",
+		PackageID:   "github.com/foo/bar",
+		FromVersion: "v1.0.0",
+		ToVersion:   "v1.1.0",
+		Level:       models.DecisionVetted,
+	}
+	if err := p.Validate(); err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestPayload_Validate_DiffSelfReferential(t *testing.T) {
+	p := &models.Payload{
+		Type:        models.PayloadTypeDiffDecision,
+		Signer:      "abc",
+		Ecosystem:   "go",
+		PackageID:   "github.com/foo/bar",
+		FromVersion: "v1.0.0",
+		ToVersion:   "v1.0.0",
+		Level:       models.DecisionVetted,
+	}
+	if err := p.Validate(); err == nil {
+		t.Error("expected error for diff with from_version == to_version")
+	}
+}
+
+func TestPayload_Validate_DiffMissingFields(t *testing.T) {
+	cases := []models.Payload{
+		{Type: models.PayloadTypeDiffDecision, Signer: "s", Ecosystem: "go", PackageID: "p", ToVersion: "v1.1", Level: models.DecisionVetted},                  // no from
+		{Type: models.PayloadTypeDiffDecision, Signer: "s", Ecosystem: "go", PackageID: "p", FromVersion: "v1.0", Level: models.DecisionVetted},                // no to
+		{Type: models.PayloadTypeDiffDecision, Signer: "s", PackageID: "p", FromVersion: "v1.0", ToVersion: "v1.1", Level: models.DecisionVetted},              // no ecosystem
+		{Type: models.PayloadTypeDiffDecision, Signer: "s", Ecosystem: "go", FromVersion: "v1.0", ToVersion: "v1.1", Level: models.DecisionVetted},             // no package_id
+		{Type: models.PayloadTypeDiffDecision, Signer: "s", Ecosystem: "go", PackageID: "p", FromVersion: "v1.0", ToVersion: "v1.1", Level: "supervetted"},     // bad level
+		{Type: models.PayloadTypeDiffDecision, Signer: "s", Ecosystem: "go", PackageID: "p", FromVersion: "v1.0", ToVersion: "v1.1"},                           // no level
+	}
+	for i, p := range cases {
+		if err := p.Validate(); err == nil {
+			t.Errorf("case %d: expected error, got none for %+v", i, p)
+		}
+	}
+}
+
+func TestParsePayload_DiffDecisionRoundTrip(t *testing.T) {
+	raw := `{
+		"type": "diff_decision",
+		"signer": "abc",
+		"ecosystem": "go",
+		"package_id": "p",
+		"from_version": "v1.0.0",
+		"to_version": "v1.1.0",
+		"level": "vetted"
+	}`
+	p, err := models.ParsePayload([]byte(raw))
+	if err != nil {
+		t.Fatalf("ParsePayload failed: %v", err)
+	}
+	if p.FromVersion != "v1.0.0" || p.ToVersion != "v1.1.0" || p.Type != models.PayloadTypeDiffDecision {
+		t.Errorf("unexpected diff payload: %+v", p)
+	}
+}
+
 func TestPayload_RoundTrip(t *testing.T) {
 	p := &models.Payload{
 		Type:      models.PayloadTypeDecision,
