@@ -150,6 +150,27 @@ func (s *Store) GetActiveConnection(signer, other string) (*CachedConnection, er
 	return best, nil
 }
 
+// ListAllCachedConnections returns every cached connection
+// regardless of signer. Used by the export command.
+func (s *Store) ListAllCachedConnections() ([]*CachedConnection, error) {
+	rows, err := s.db.Query(
+		`SELECT id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at
+		 FROM cached_connections ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*CachedConnection
+	for rows.Next() {
+		c, err := scanCachedConnection(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 func (s *Store) GetCachedConnectionsBySigner(signerID string) ([]*CachedConnection, error) {
 	rows, err := s.db.Query(
 		`SELECT id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at

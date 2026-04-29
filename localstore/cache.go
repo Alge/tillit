@@ -147,6 +147,27 @@ func (s *Store) LookupCachedSignature(q string) (*CachedSignature, error) {
 	}
 }
 
+// ListAllCachedSignatures returns every cached signature regardless
+// of signer. Used by the export command.
+func (s *Store) ListAllCachedSignatures() ([]*CachedSignature, error) {
+	rows, err := s.db.Query(
+		`SELECT id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at, fetched_at
+		 FROM cached_signatures ORDER BY uploaded_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*CachedSignature
+	for rows.Next() {
+		sig, err := scanCachedSignature(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sig)
+	}
+	return out, nil
+}
+
 func (s *Store) GetCachedSignaturesBySigner(signerID string) ([]*CachedSignature, error) {
 	rows, err := s.db.Query(
 		`SELECT id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at, fetched_at
