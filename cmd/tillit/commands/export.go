@@ -35,13 +35,31 @@ type exportDoc struct {
 	PushState         []*localstore.PushStateRow     `json:"push_state,omitempty"`
 }
 
-// Export writes a complete snapshot of the local store to a file.
+// Export writes a snapshot of the local store to a file. By default
+// only the active user's own state is included (their keys, peers,
+// servers, signatures+connections they signed, and the push-state
+// tracking those uploads). The --all flag widens the scope to also
+// include every cached row originating from peers.
+//
 // The output contains private key material — handle accordingly.
 func Export(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: tillit export <file>")
+	includeAll := false
+	var positional []string
+	for _, a := range args {
+		switch a {
+		case "--all", "-a":
+			includeAll = true
+		case "--help", "-h":
+			fmt.Fprintln(os.Stderr, "usage: tillit export [--all] <file>")
+			return nil
+		default:
+			positional = append(positional, a)
+		}
 	}
-	path := args[0]
+	if len(positional) != 1 {
+		return fmt.Errorf("usage: tillit export [--all] <file>")
+	}
+	path := positional[0]
 
 	s, err := openStore()
 	if err != nil {
@@ -49,7 +67,7 @@ func Export(args []string) error {
 	}
 	defer s.Close()
 
-	doc, err := buildExportDoc(s)
+	doc, err := buildExportDoc(s, includeAll)
 	if err != nil {
 		return err
 	}
@@ -120,9 +138,13 @@ func Import(args []string) error {
 	return nil
 }
 
-// buildExportDoc gathers every list-able piece of state into a single
-// document.
-func buildExportDoc(s *localstore.Store) (*exportDoc, error) {
+// buildExportDoc gathers state into a snapshot. When includeAll is
+// false, cached signatures and connections are filtered to those
+// signed by the active user (everything you produced yourself), and
+// the cached_users pubkey cache (which is purely a verification cache
+// for other peers' keys) is omitted entirely. When includeAll is
+// true, every row from every table is included.
+func buildExportDoc(s *localstore.Store, includeAll bool) (*exportDoc, error) {
 	keys, err := s.ListKeys()
 	if err != nil {
 		return nil, fmt.Errorf("list keys: %w", err)
@@ -135,17 +157,13 @@ func buildExportDoc(s *localstore.Store) (*exportDoc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list servers: %w", err)
 	}
-	sigs, err := s.ListAllCachedSignatures()
+	allSigs, err := s.ListAllCachedSignatures()
 	if err != nil {
 		return nil, fmt.Errorf("list signatures: %w", err)
 	}
-	conns, err := s.ListAllCachedConnections()
+	allConns, err := s.ListAllCachedConnections()
 	if err != nil {
 		return nil, fmt.Errorf("list connections: %w", err)
-	}
-	users, err := s.ListCachedUsers()
-	if err != nil {
-		return nil, fmt.Errorf("list cached users: %w", err)
 	}
 	push, err := s.ListAllPushState()
 	if err != nil {
@@ -153,18 +171,44 @@ func buildExportDoc(s *localstore.Store) (*exportDoc, error) {
 	}
 	active, _ := s.GetActiveKey()
 
-	return &exportDoc{
-		Version:           exportFormatVersion,
-		ExportedAt:        time.Now().UTC().Format(time.RFC3339),
-		ActiveKey:         active,
-		Keys:              keys,
-		Peers:             peers,
-		Servers:           servers,
-		CachedSignatures:  sigs,
-		CachedConnections: conns,
-		CachedUsers:       users,
-		PushState:         push,
-	}, nil
+	doc := &exportDoc{
+		Version:    exportFormatVersion,
+		ExportedAt: time.Now().UTC().Format(time.RFC3339),
+		ActiveKey:  active,
+		Keys:       keys,
+		Peers:      peers,
+		Servers:    servers,
+		PushState:  push,
+	}
+	if includeAll {
+		users, err := s.ListCachedUsers()
+		if err != nil {
+			return nil, fmt.Errorf("list cached users: %w", err)
+		}
+		doc.CachedSignatures = allSigs
+		doc.CachedConnections = allConns
+		doc.CachedUsers = users
+		return doc, nil
+	}
+
+	// Default scope: only the active user's own rows.
+	_, userID, err := activeSignerAndID(s)
+	if err != nil {
+		// No active key — nothing user-owned to export beyond keys.
+		// Fall through with empty filtered slices.
+		return doc, nil
+	}
+	for _, sig := range allSigs {
+		if sig.Signer == userID {
+			doc.CachedSignatures = append(doc.CachedSignatures, sig)
+		}
+	}
+	for _, c := range allConns {
+		if c.Signer == userID {
+			doc.CachedConnections = append(doc.CachedConnections, c)
+		}
+	}
+	return doc, nil
 }
 
 func writeExport(w io.Writer, doc *exportDoc) error {
