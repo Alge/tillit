@@ -39,10 +39,8 @@ type composerLockPackage struct {
 }
 
 type composerLockBlock struct {
-	Type      string `json:"type,omitempty"`
-	URL       string `json:"url,omitempty"`
-	Reference string `json:"reference,omitempty"`
-	Shasum    string `json:"shasum,omitempty"`
+	URL    string `json:"url,omitempty"`
+	Shasum string `json:"shasum,omitempty"`
 }
 
 func (ComposerLock) Parse(fsys fs.FS, lockfilePath string) (ecosystems.ParseResult, error) {

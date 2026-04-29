@@ -44,12 +44,11 @@ type packageResolvedPin struct {
 	// V2 fields.
 	Identity string               `json:"identity,omitempty"`
 	Kind     string               `json:"kind,omitempty"`
-	Location string               `json:"location,omitempty"`
 	State    packageResolvedState `json:"state"`
 
-	// V1 fallbacks (older Xcode-emitted files).
-	Package       string `json:"package,omitempty"`
-	RepositoryURL string `json:"repositoryURL,omitempty"`
+	// V1 fallback (older Xcode-emitted files): the display name
+	// lives under `package` instead of `identity`.
+	Package string `json:"package,omitempty"`
 }
 
 type packageResolvedState struct {
