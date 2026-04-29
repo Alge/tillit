@@ -248,9 +248,10 @@ func formatSummary(rows []row) string {
 	return b.String()
 }
 
-// formatStatusCounts joins the non-zero status counts into a comma-
-// separated string in severity order. Returns "—" when every status is
-// zero (i.e. there are no packages of this kind).
+// formatStatusCounts joins counts for all statuses in severity order
+// (rejected → unknown → allowed → vetted), including zeros, so the
+// reader always sees the full breakdown without having to remember
+// which categories were omitted.
 func formatStatusCounts(counts map[resolver.Status]int) string {
 	order := []resolver.Status{
 		resolver.StatusRejected,
@@ -258,14 +259,9 @@ func formatStatusCounts(counts map[resolver.Status]int) string {
 		resolver.StatusAllowed,
 		resolver.StatusVetted,
 	}
-	var parts []string
-	for _, st := range order {
-		if n := counts[st]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, st))
-		}
-	}
-	if len(parts) == 0 {
-		return "—"
+	parts := make([]string, len(order))
+	for i, st := range order {
+		parts[i] = fmt.Sprintf("%d %s", counts[st], st)
 	}
 	return strings.Join(parts, ", ")
 }
