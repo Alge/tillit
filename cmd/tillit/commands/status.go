@@ -102,6 +102,15 @@ func printDataSummary(s *localstore.Store, userID string) error {
 	}
 	fmt.Printf("Local data: %d signature(s), %d connection(s) signed by you\n",
 		len(mySigs), len(myConns))
+
+	// Heads-up if there's cached data from signers outside the trust
+	// graph that 'tillit clean' would prune. Only print a line when
+	// there's something to clean — silent in the common case.
+	candidates, err := findPruneCandidates(s, userID)
+	if err == nil && candidates.Total() > 0 {
+		fmt.Printf("Cleanable: %d row(s) cached from signers no longer in your trust graph — run 'tillit clean' to remove.\n",
+			candidates.Total())
+	}
 	fmt.Println()
 	return nil
 }
