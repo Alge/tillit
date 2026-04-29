@@ -46,6 +46,42 @@ func (s *Store) HasBeenPushed(itemID string, itemType ItemType) (bool, error) {
 	return n > 0, nil
 }
 
+// PushStateRow is one entry from push_state. Exported only for
+// snapshot purposes (export/import).
+type PushStateRow struct {
+	ItemID    string
+	ItemType  ItemType
+	ServerURL string
+	PushedAt  time.Time
+}
+
+// ListAllPushState returns every row in push_state. Used by the
+// export command to snapshot the local state.
+func (s *Store) ListAllPushState() ([]*PushStateRow, error) {
+	rows, err := s.db.Query(`SELECT item_id, item_type, server_url, pushed_at FROM push_state`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*PushStateRow
+	for rows.Next() {
+		r := &PushStateRow{}
+		var pushedAtStr string
+		var typeStr string
+		if err := rows.Scan(&r.ItemID, &typeStr, &r.ServerURL, &pushedAtStr); err != nil {
+			return nil, err
+		}
+		r.ItemType = ItemType(typeStr)
+		t, err := time.Parse(time.RFC3339, pushedAtStr)
+		if err != nil {
+			return nil, err
+		}
+		r.PushedAt = t
+		out = append(out, r)
+	}
+	return out, nil
+}
+
 func (s *Store) IsPushed(itemID string, itemType ItemType, serverURL string) (bool, error) {
 	var n int
 	err := s.db.QueryRow(

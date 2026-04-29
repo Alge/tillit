@@ -44,6 +44,10 @@ func main() {
 		err = commands.Publish(args)
 	case "mirror":
 		err = commands.Mirror(args)
+	case "export":
+		err = commands.Export(args)
+	case "import":
+		err = commands.Import(args)
 	case "status":
 		err = commands.Status(args)
 	case "query":
@@ -90,6 +94,8 @@ commands:
   publish                     push any locally-cached signatures to registered servers
   mirror push <server>        privately push your sigs+connections to your own server (cross-device backup)
   mirror pull <server>        pull your private sigs+connections back from that server
+  export <file>               write a full local-state snapshot (incl. private key) to a file
+  import <file>               merge a previously-exported snapshot into the local store
   status                      show pending pushes and last-sync time per registered server
   query <ecosystem> <pkg> [--verbose]
                               show trusted versions of a package, grouped by status

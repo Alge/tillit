@@ -39,6 +39,32 @@ func (s *Store) SaveCachedUser(u *CachedUser) error {
 	return err
 }
 
+// ListCachedUsers returns every row from cached_users. Used by the
+// export command to snapshot the local state — most callers should
+// use GetCachedUser instead.
+func (s *Store) ListCachedUsers() ([]*CachedUser, error) {
+	rows, err := s.db.Query(`SELECT id, username, pubkey, algorithm, fetched_at FROM cached_users`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*CachedUser
+	for rows.Next() {
+		u := &CachedUser{}
+		var fetchedAtStr string
+		if err := rows.Scan(&u.ID, &u.Username, &u.PubKey, &u.Algorithm, &fetchedAtStr); err != nil {
+			return nil, err
+		}
+		t, err := time.Parse(time.RFC3339, fetchedAtStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed parsing fetched_at: %w", err)
+		}
+		u.FetchedAt = t
+		out = append(out, u)
+	}
+	return out, nil
+}
+
 func (s *Store) GetCachedUser(id string) (*CachedUser, error) {
 	u := &CachedUser{}
 	var fetchedAtStr string
