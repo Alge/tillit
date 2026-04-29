@@ -44,6 +44,8 @@ func main() {
 		err = commands.Status(args)
 	case "query":
 		err = commands.Query(args)
+	case "inspect":
+		err = commands.Inspect(args)
 	case "check":
 		err = commands.Check(args)
 	default:
@@ -83,5 +85,6 @@ commands:
   status                      show pending pushes and last-sync time per registered server
   query <ecosystem> <pkg> [--verbose]
                               show trusted versions of a package, grouped by status
+  inspect <signature_id>      show full details of a cached signature (accepts a hash prefix)
   check <lockfile>            check every package in a lockfile against the trust graph`)
 }

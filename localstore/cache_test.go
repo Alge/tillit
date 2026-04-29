@@ -67,6 +67,65 @@ func TestGetCachedSignaturesBySigner(t *testing.T) {
 	}
 }
 
+func TestLookupCachedSignature_FullID(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	sig := &localstore.CachedSignature{
+		ID: "a3f9d2c1b8e74f5a", Signer: "alice", Payload: "{}",
+		Algorithm: "ed25519", Sig: "x", UploadedAt: now, FetchedAt: now,
+	}
+	s.SaveCachedSignature(sig)
+
+	got, err := s.LookupCachedSignature("a3f9d2c1b8e74f5a")
+	if err != nil {
+		t.Fatalf("LookupCachedSignature failed: %v", err)
+	}
+	if got.ID != "a3f9d2c1b8e74f5a" {
+		t.Errorf("got %q, want %q", got.ID, "a3f9d2c1b8e74f5a")
+	}
+}
+
+func TestLookupCachedSignature_Prefix(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	s.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "a3f9d2c1b8e74f5a", Signer: "alice", Payload: "{}",
+		Algorithm: "ed25519", Sig: "x", UploadedAt: now, FetchedAt: now,
+	})
+
+	got, err := s.LookupCachedSignature("a3f9d2c1")
+	if err != nil {
+		t.Fatalf("LookupCachedSignature(prefix) failed: %v", err)
+	}
+	if got.ID != "a3f9d2c1b8e74f5a" {
+		t.Errorf("got %q, want full ID", got.ID)
+	}
+}
+
+func TestLookupCachedSignature_AmbiguousPrefix(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, id := range []string{"a3f9d2c1b8e74f5a", "a3f9d2c1b8e74f5b"} {
+		s.SaveCachedSignature(&localstore.CachedSignature{
+			ID: id, Signer: "alice", Payload: "{}",
+			Algorithm: "ed25519", Sig: "x", UploadedAt: now, FetchedAt: now,
+		})
+	}
+
+	_, err := s.LookupCachedSignature("a3f9d2c1")
+	if err == nil {
+		t.Fatal("expected ambiguous-prefix error, got nil")
+	}
+}
+
+func TestLookupCachedSignature_NotFound(t *testing.T) {
+	s := newTestStore(t)
+	_, err := s.LookupCachedSignature("nonexistent")
+	if err == nil {
+		t.Error("expected error for missing prefix")
+	}
+}
+
 func TestSaveCachedSignature_Upsert(t *testing.T) {
 	s := newTestStore(t)
 
