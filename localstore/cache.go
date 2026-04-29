@@ -62,6 +62,43 @@ func (s *Store) GetCachedSignature(id string) (*CachedSignature, error) {
 		 FROM cached_signatures WHERE id = ?`, id))
 }
 
+// LookupCachedSignature returns the cached signature whose ID exactly
+// matches q, or whose ID has q as a prefix when no exact match exists.
+// Returns an error if zero or more than one signature matches the prefix.
+func (s *Store) LookupCachedSignature(q string) (*CachedSignature, error) {
+	if q == "" {
+		return nil, fmt.Errorf("signature id is empty")
+	}
+	if sig, err := s.GetCachedSignature(q); err == nil {
+		return sig, nil
+	}
+	rows, err := s.db.Query(
+		`SELECT id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at, fetched_at
+		 FROM cached_signatures WHERE id LIKE ? LIMIT 2`, q+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var matches []*CachedSignature
+	for rows.Next() {
+		sig, err := scanCachedSignature(rows)
+		if err != nil {
+			return nil, err
+		}
+		matches = append(matches, sig)
+	}
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("no signature matches %q", q)
+	case 1:
+		return matches[0], nil
+	default:
+		return nil, fmt.Errorf("signature prefix %q is ambiguous (matches %s, %s, ...)",
+			q, matches[0].ID, matches[1].ID)
+	}
+}
+
 func (s *Store) GetCachedSignaturesBySigner(signerID string) ([]*CachedSignature, error) {
 	rows, err := s.db.Query(
 		`SELECT id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at, fetched_at
