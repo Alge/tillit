@@ -2,6 +2,7 @@ package localstore
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -37,6 +38,9 @@ func (s *Store) migrateCachedConnections() error {
 	return err
 }
 
+// SaveCachedConnection inserts a connection row. ON CONFLICT(id) the
+// existing row wins — same write-once rationale as SaveCachedSignature.
+// Revocation is derived via IsCachedConnectionRevoked.
 func (s *Store) SaveCachedConnection(c *CachedConnection) error {
 	revokedAt := (*string)(nil)
 	if c.RevokedAt != nil {
@@ -47,9 +51,7 @@ func (s *Store) SaveCachedConnection(c *CachedConnection) error {
 		INSERT INTO cached_connections
 			(id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			payload=excluded.payload, revoked=excluded.revoked,
-			revoked_at=excluded.revoked_at, fetched_at=excluded.fetched_at`,
+		ON CONFLICT(id) DO NOTHING`,
 		c.ID, c.Signer, c.OtherID, c.Payload, c.Algorithm, c.Sig,
 		c.CreatedAt.UTC().Format(time.RFC3339),
 		c.Revoked, revokedAt,
@@ -58,28 +60,94 @@ func (s *Store) SaveCachedConnection(c *CachedConnection) error {
 	return err
 }
 
+// IsCachedConnectionRevoked reports whether a connection_revocation
+// signature targeting id, signed by the same signer, exists in the
+// local cache. Mirrors IsCachedSignatureRevoked but on the connections
+// table — connection revocations live as cached_connections rows
+// whose payload type is "connection_revocation".
+func (s *Store) IsCachedConnectionRevoked(id string) (bool, *time.Time, error) {
+	target, err := s.GetCachedConnection(id)
+	if err != nil {
+		return false, nil, err
+	}
+	conns, err := s.GetCachedConnectionsBySigner(target.Signer)
+	if err != nil {
+		return false, nil, err
+	}
+	for _, candidate := range conns {
+		if candidate.ID == id {
+			continue
+		}
+		if isConnectionRevocationFor(candidate.Payload, id) {
+			t := candidate.CreatedAt
+			return true, &t, nil
+		}
+	}
+	return false, nil, nil
+}
+
+func isConnectionRevocationFor(payload, targetID string) bool {
+	var p struct {
+		Type     string `json:"type"`
+		TargetID string `json:"target_id"`
+	}
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return false
+	}
+	return p.Type == "connection_revocation" && p.TargetID == targetID
+}
+
 func (s *Store) GetCachedConnection(id string) (*CachedConnection, error) {
 	return scanCachedConnection(s.db.QueryRow(
 		`SELECT id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at
 		 FROM cached_connections WHERE id = ?`, id))
 }
 
-// GetActiveConnection returns the most recent non-revoked connection from
-// signer to other, or (nil, nil) if none exists.
+// GetActiveConnection returns the most recent connection from signer
+// to other that has not been revoked, or (nil, nil) if none exists.
+// Revocation is derived from the existence of a
+// connection_revocation row in the same signer's set — the cache
+// row's mutable revoked column is ignored.
 func (s *Store) GetActiveConnection(signer, other string) (*CachedConnection, error) {
-	row := s.db.QueryRow(
-		`SELECT id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at
-		 FROM cached_connections
-		 WHERE signer = ? AND other_id = ? AND revoked = 0
-		 ORDER BY created_at DESC LIMIT 1`, signer, other)
-	c, err := scanCachedConnection(row)
+	conns, err := s.GetCachedConnectionsBySigner(signer)
 	if err != nil {
-		if err.Error() == "cached connection not found" {
-			return nil, nil
-		}
 		return nil, err
 	}
-	return c, nil
+	revoked := map[string]bool{}
+	for _, c := range conns {
+		var p struct {
+			Type     string `json:"type"`
+			TargetID string `json:"target_id"`
+		}
+		if err := json.Unmarshal([]byte(c.Payload), &p); err != nil {
+			continue
+		}
+		if p.Type == "connection_revocation" && p.TargetID != "" {
+			revoked[p.TargetID] = true
+		}
+	}
+	var best *CachedConnection
+	for _, c := range conns {
+		if c.OtherID != other {
+			continue
+		}
+		if revoked[c.ID] {
+			continue
+		}
+		var p struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal([]byte(c.Payload), &p); err != nil {
+			continue
+		}
+		if p.Type != "connection" {
+			continue
+		}
+		if best == nil || c.CreatedAt.After(best.CreatedAt) {
+			best = c
+		}
+	}
+	return best, nil
 }
 
 func (s *Store) GetCachedConnectionsBySigner(signerID string) ([]*CachedConnection, error) {

@@ -222,14 +222,9 @@ func Revoke(args []string) error {
 		return fmt.Errorf("failed saving revocation: %w", err)
 	}
 
-	now := time.Now().UTC()
-	if existing, err := s.GetCachedSignature(targetID); err == nil {
-		existing.Revoked = true
-		existing.RevokedAt = &now
-		if err := s.SaveCachedSignature(existing); err != nil {
-			fmt.Printf("warning: failed marking target %s revoked locally: %v\n", targetID, err)
-		}
-	}
+	// No need to mutate the cached target — revocation status is
+	// derived from the existence of this revocation signature, which
+	// signAndCache just stored.
 
 	fmt.Printf("Revoked %s (id: %s)\n", targetID, id)
 	fmt.Println("Run 'tillit publish' to push it to your registered servers.")

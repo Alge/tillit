@@ -2,6 +2,7 @@ package localstore
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -35,6 +36,12 @@ func (s *Store) migrateCache() error {
 	return err
 }
 
+// SaveCachedSignature inserts a signature row. ON CONFLICT(id) the
+// existing row wins — cached rows are immutable signed artifacts,
+// keyed by content hash, so any second write necessarily has the
+// same payload+sig anyway. Never overwriting also rules out a class
+// of bugs where a fresh fetch from a server (or peer) that doesn't
+// know about a revocation could clobber locally-known state.
 func (s *Store) SaveCachedSignature(sig *CachedSignature) error {
 	revokedAt := (*string)(nil)
 	if sig.RevokedAt != nil {
@@ -45,15 +52,56 @@ func (s *Store) SaveCachedSignature(sig *CachedSignature) error {
 		INSERT INTO cached_signatures
 			(id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at, fetched_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			payload=excluded.payload, revoked=excluded.revoked,
-			revoked_at=excluded.revoked_at, fetched_at=excluded.fetched_at`,
+		ON CONFLICT(id) DO NOTHING`,
 		sig.ID, sig.Signer, sig.Payload, sig.Algorithm, sig.Sig,
 		sig.UploadedAt.UTC().Format(time.RFC3339),
 		sig.Revoked, revokedAt,
 		sig.FetchedAt.UTC().Format(time.RFC3339),
 	)
 	return err
+}
+
+// IsCachedSignatureRevoked reports whether a revocation signature
+// targeting id, signed by the same signer, exists in the local cache.
+// Revocation status is purely derived — there is no mutable revoked
+// flag the cache trusts. Returns the revocation's upload time as the
+// effective revoked_at when one exists.
+func (s *Store) IsCachedSignatureRevoked(id string) (bool, *time.Time, error) {
+	target, err := s.GetCachedSignature(id)
+	if err != nil {
+		return false, nil, err
+	}
+	sigs, err := s.GetCachedSignaturesBySigner(target.Signer)
+	if err != nil {
+		return false, nil, err
+	}
+	for _, candidate := range sigs {
+		if candidate.ID == id {
+			continue
+		}
+		// Lightweight check on the payload — the resolver and inspect
+		// already use the same json.Unmarshal pattern, so this is the
+		// cheapest place to centralise the rule.
+		if isRevocationFor(candidate.Payload, id) {
+			t := candidate.UploadedAt
+			return true, &t, nil
+		}
+	}
+	return false, nil, nil
+}
+
+// isRevocationFor returns true when the cached payload JSON declares
+// type=revocation with the given target_id. Defined here (rather than
+// pulling in models package) to keep localstore self-contained.
+func isRevocationFor(payload, targetID string) bool {
+	var p struct {
+		Type     string `json:"type"`
+		TargetID string `json:"target_id"`
+	}
+	if err := json.Unmarshal([]byte(payload), &p); err != nil {
+		return false
+	}
+	return p.Type == "revocation" && p.TargetID == targetID
 }
 
 func (s *Store) GetCachedSignature(id string) (*CachedSignature, error) {

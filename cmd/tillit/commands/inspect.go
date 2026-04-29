@@ -41,24 +41,24 @@ func runInspect(s *localstore.Store, w io.Writer, id string) error {
 	fmt.Fprintf(w, "Algorithm:   %s\n", sig.Algorithm)
 	fmt.Fprintf(w, "Uploaded at: %s\n", sig.UploadedAt.Format("2006-01-02 15:04:05 MST"))
 	fmt.Fprintf(w, "Fetched at:  %s\n", sig.FetchedAt.Format("2006-01-02 15:04:05 MST"))
-	if sig.Revoked {
-		when := ""
-		if sig.RevokedAt != nil {
-			when = " at " + sig.RevokedAt.Format("2006-01-02 15:04:05 MST")
+
+	// Revocation is derived: a revocation sig with target_id == sig.ID
+	// signed by the same signer is the source of truth, not the cache
+	// row's mutable revoked column.
+	rev, _ := findRevocationFor(s, sig)
+	if rev != nil {
+		fmt.Fprintf(w, "Revoked:     yes at %s\n",
+			rev.UploadedAt.Format("2006-01-02 15:04:05 MST"))
+		fmt.Fprintln(w, "Revocation:")
+		fmt.Fprintf(w, "  ID:          %s\n", rev.ID)
+		fmt.Fprintf(w, "  Uploaded at: %s\n", rev.UploadedAt.Format("2006-01-02 15:04:05 MST"))
+		fmt.Fprintln(w, "  Payload:")
+		if pretty, err := prettyJSON(rev.Payload); err == nil {
+			fmt.Fprintln(w, indent(pretty, "    "))
+		} else {
+			fmt.Fprintln(w, indent(rev.Payload, "    "))
 		}
-		fmt.Fprintf(w, "Revoked:     yes%s\n", when)
-		if rev, err := findRevocationFor(s, sig); err == nil && rev != nil {
-			fmt.Fprintln(w, "Revocation:")
-			fmt.Fprintf(w, "  ID:          %s\n", rev.ID)
-			fmt.Fprintf(w, "  Uploaded at: %s\n", rev.UploadedAt.Format("2006-01-02 15:04:05 MST"))
-			fmt.Fprintln(w, "  Payload:")
-			if pretty, err := prettyJSON(rev.Payload); err == nil {
-				fmt.Fprintln(w, indent(pretty, "    "))
-			} else {
-				fmt.Fprintln(w, indent(rev.Payload, "    "))
-			}
-			fmt.Fprintf(w, "  Sig:         %s\n", rev.Sig)
-		}
+		fmt.Fprintf(w, "  Sig:         %s\n", rev.Sig)
 	} else {
 		fmt.Fprintln(w, "Revoked:     no")
 	}

@@ -148,6 +148,20 @@ func (r *Resolver) collectMatching(viewer, ecosystem, packageID string) ([]sigIn
 		if err != nil {
 			return nil, nil, fmt.Errorf("get signatures for %s: %w", signer, err)
 		}
+		// First pass: collect IDs that this signer has revoked. Revocation
+		// status is purely derived from the existence of a revocation
+		// signature targeting an id; the cache row's stale revoked flag
+		// is ignored.
+		revokedTargets := map[string]bool{}
+		for _, sig := range sigs {
+			var p models.Payload
+			if err := json.Unmarshal([]byte(sig.Payload), &p); err != nil {
+				continue
+			}
+			if p.Type == models.PayloadTypeRevocation {
+				revokedTargets[p.TargetID] = true
+			}
+		}
 		for _, sig := range sigs {
 			var p models.Payload
 			if err := json.Unmarshal([]byte(sig.Payload), &p); err != nil {
@@ -178,7 +192,7 @@ func (r *Resolver) collectMatching(viewer, ecosystem, packageID string) ([]sigIn
 			default:
 				continue
 			}
-			if sig.Revoked {
+			if revokedTargets[sig.ID] {
 				revoked = append(revoked, d)
 				continue
 			}

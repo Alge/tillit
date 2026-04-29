@@ -247,20 +247,31 @@ func TestBuildTrustSet_RevokedConnectionIgnored(t *testing.T) {
 	s := newTestStore(t)
 	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 2})
 
-	// Manually save a revoked connection
-	revokedAt := time.Now()
-	payload := &models.Payload{
+	// Save the connection itself (alice → bob).
+	connID := uuid.NewString()
+	connPayload := &models.Payload{
 		Type: models.PayloadTypeConnection, Signer: "alice", OtherID: "bob",
 		Public: true, Trust: true, TrustExtends: 1,
 	}
-	bytes, _ := json.Marshal(payload)
+	connBytes, _ := json.Marshal(connPayload)
 	if err := s.SaveCachedConnection(&localstore.CachedConnection{
-		ID: uuid.NewString(), Signer: "alice", OtherID: "bob",
-		Payload: string(bytes), Algorithm: "ed25519", Sig: "x",
+		ID: connID, Signer: "alice", OtherID: "bob",
+		Payload: string(connBytes), Algorithm: "ed25519", Sig: "x",
 		CreatedAt: time.Now(), FetchedAt: time.Now(),
-		Revoked: true, RevokedAt: &revokedAt,
 	}); err != nil {
 		t.Fatalf("SaveCachedConnection: %v", err)
+	}
+	// Revocation is a separate signed row referencing the original.
+	revPayload := &models.Payload{
+		Type: models.PayloadTypeConnectionRevocation, Signer: "alice", TargetID: connID,
+	}
+	revBytes, _ := json.Marshal(revPayload)
+	if err := s.SaveCachedConnection(&localstore.CachedConnection{
+		ID: uuid.NewString(), Signer: "alice", OtherID: "bob",
+		Payload: string(revBytes), Algorithm: "ed25519", Sig: "y",
+		CreatedAt: time.Now(), FetchedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("save revocation: %v", err)
 	}
 
 	r := New(s, "me")
