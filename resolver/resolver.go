@@ -60,6 +60,11 @@ type PackageVerdict struct {
 	Ecosystem string
 	PackageID string
 	Spans     []VersionSpan
+	// Revoked lists decisions that would otherwise have applied (signed
+	// by a trusted signer, matching this package) but have since been
+	// revoked. They do NOT contribute to Spans — they're surfaced so
+	// the CLI can show the user what was withdrawn.
+	Revoked []ContributingDecision
 }
 
 // VersionSpan covers a contiguous run of versions sharing one Status.

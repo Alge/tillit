@@ -13,8 +13,12 @@ import (
 // decisions contribute spans covering [FromVersion, ToVersion] (when the
 // chain is trusted). Same-status spans that overlap are merged, so a
 // long delta chain shows as one continuous range.
+//
+// Revoked signatures from trusted signers are returned in the Revoked
+// field — they don't contribute to spans, but the CLI surfaces them in
+// --verbose mode so a user who revoked their own decision still sees it.
 func (r *Resolver) Package(viewer, ecosystem, packageID string) (PackageVerdict, error) {
-	allSigs, err := r.collectMatching(viewer, ecosystem, packageID)
+	allSigs, revoked, err := r.collectMatching(viewer, ecosystem, packageID)
 	if err != nil {
 		return PackageVerdict{}, err
 	}
@@ -58,14 +62,19 @@ func (r *Resolver) Package(viewer, ecosystem, packageID string) (PackageVerdict,
 	}
 
 	merged := mergeSpans(spans)
-	return PackageVerdict{Ecosystem: ecosystem, PackageID: packageID, Spans: merged}, nil
+	return PackageVerdict{
+		Ecosystem: ecosystem,
+		PackageID: packageID,
+		Spans:     merged,
+		Revoked:   revoked,
+	}, nil
 }
 
 // Version returns the verdict for one specific version, considering both
 // exact decisions matching it and delta decisions whose [from, to]
 // covers it.
 func (r *Resolver) Version(viewer, ecosystem, packageID, version string) (Verdict, error) {
-	allSigs, err := r.collectMatching(viewer, ecosystem, packageID)
+	allSigs, _, err := r.collectMatching(viewer, ecosystem, packageID)
 	if err != nil {
 		return Verdict{}, err
 	}
@@ -123,23 +132,23 @@ type sigInfo struct {
 }
 
 // collectMatching builds the trust set, then returns every parsed
-// signature within it that matches (ecosystem, packageID).
-func (r *Resolver) collectMatching(viewer, ecosystem, packageID string) ([]sigInfo, error) {
+// signature within it that matches (ecosystem, packageID). Revoked
+// signatures are returned in a separate slice so callers can show them
+// without letting them influence the verdict.
+func (r *Resolver) collectMatching(viewer, ecosystem, packageID string) ([]sigInfo, []ContributingDecision, error) {
 	trustSet, err := r.buildTrustSet(viewer)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var out []sigInfo
+	var revoked []ContributingDecision
 	for signer, entry := range trustSet {
 		sigs, err := r.store.GetCachedSignaturesBySigner(signer)
 		if err != nil {
-			return nil, fmt.Errorf("get signatures for %s: %w", signer, err)
+			return nil, nil, fmt.Errorf("get signatures for %s: %w", signer, err)
 		}
 		for _, sig := range sigs {
-			if sig.Revoked {
-				continue
-			}
 			var p models.Payload
 			if err := json.Unmarshal([]byte(sig.Payload), &p); err != nil {
 				continue
@@ -162,11 +171,21 @@ func (r *Resolver) collectMatching(viewer, ecosystem, packageID string) ([]sigIn
 			case models.PayloadTypeDecision:
 				d.Kind = KindExact
 				d.Version = p.Version
-				out = append(out, sigInfo{decision: d, exactVersion: p.Version})
 			case models.PayloadTypeDeltaDecision:
 				d.Kind = KindDelta
 				d.FromVersion = p.FromVersion
 				d.ToVersion = p.ToVersion
+			default:
+				continue
+			}
+			if sig.Revoked {
+				revoked = append(revoked, d)
+				continue
+			}
+			switch p.Type {
+			case models.PayloadTypeDecision:
+				out = append(out, sigInfo{decision: d, exactVersion: p.Version})
+			case models.PayloadTypeDeltaDecision:
 				out = append(out, sigInfo{
 					decision: d, isDelta: true,
 					fromVersion: p.FromVersion, toVersion: p.ToVersion,
@@ -174,7 +193,7 @@ func (r *Resolver) collectMatching(viewer, ecosystem, packageID string) ([]sigIn
 			}
 		}
 	}
-	return out, nil
+	return out, revoked, nil
 }
 
 // mergeSpans sorts spans by From and merges adjacent same-status spans

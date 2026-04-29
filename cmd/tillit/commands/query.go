@@ -42,7 +42,15 @@ func Query(args []string) error {
 	}
 
 	if len(pv.Spans) == 0 {
+		if verbose && len(pv.Revoked) > 0 {
+			fmt.Printf("No active decisions about %s/%s — all have been revoked.\n", ecosystem, packageID)
+			printRevokedSection(pv.Revoked)
+			return nil
+		}
 		fmt.Printf("No trusted decisions about %s/%s.\n", ecosystem, packageID)
+		if !verbose && len(pv.Revoked) > 0 {
+			fmt.Printf("(%d revoked signature(s) hidden — re-run with --verbose to see them.)\n", len(pv.Revoked))
+		}
 		fmt.Println("Try 'tillit sync' to fetch fresh data from your peers.")
 		return nil
 	}
@@ -51,7 +59,19 @@ func Query(args []string) error {
 	for _, span := range pv.Spans {
 		printSpan(span, verbose)
 	}
+	if verbose && len(pv.Revoked) > 0 {
+		printRevokedSection(pv.Revoked)
+	}
 	return nil
+}
+
+// printRevokedSection lists revoked signatures from trusted signers so
+// the user can see what was withdrawn. Only called in --verbose mode.
+func printRevokedSection(revoked []resolver.ContributingDecision) {
+	fmt.Println("Revoked:")
+	for _, d := range revoked {
+		fmt.Println("  " + verboseDecisionLine(d) + " [revoked]")
+	}
 }
 
 func printSpan(span resolver.VersionSpan, verbose bool) {

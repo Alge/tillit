@@ -181,6 +181,48 @@ func TestPackage_RevokedSignatureIgnored(t *testing.T) {
 	}
 }
 
+func TestPackage_RevokedSignatureSurfacedSeparately(t *testing.T) {
+	s := newTestStore(t)
+	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 0})
+	id := addDecision(t, s, "alice", "go", "p", "v1.0.0", models.DecisionVetted, "looked fine then")
+	revokeSignature(t, s, id)
+
+	r := New(s, "me")
+	pv, err := r.Package("me", "go", "p")
+	if err != nil {
+		t.Fatalf("Package: %v", err)
+	}
+	// Revoked decisions must NOT contribute to spans.
+	if len(pv.Spans) != 0 {
+		t.Errorf("expected no spans for revoked-only package, got %+v", pv.Spans)
+	}
+	// But they must be surfaced separately so callers (CLI --verbose) can
+	// show the user that there was once a decision.
+	if len(pv.Revoked) != 1 {
+		t.Fatalf("expected 1 revoked decision in PackageVerdict.Revoked, got %d", len(pv.Revoked))
+	}
+	d := pv.Revoked[0]
+	if d.SignerID != "alice" || d.Version != "v1.0.0" || d.Level != "vetted" {
+		t.Errorf("revoked decision has wrong fields: %+v", d)
+	}
+	if d.Reason != "looked fine then" {
+		t.Errorf("expected reason preserved, got %q", d.Reason)
+	}
+}
+
+func TestPackage_RevokedFromUntrustedSignerNotSurfaced(t *testing.T) {
+	s := newTestStore(t)
+	// alice is NOT a peer — her revoked sig must not show up at all.
+	id := addDecision(t, s, "alice", "go", "p", "v1.0.0", models.DecisionVetted, "")
+	revokeSignature(t, s, id)
+
+	r := New(s, "me")
+	pv, _ := r.Package("me", "go", "p")
+	if len(pv.Revoked) != 0 {
+		t.Errorf("revoked decision from untrusted signer must be filtered, got %+v", pv.Revoked)
+	}
+}
+
 func TestPackage_FiltersByEcosystemAndPackage(t *testing.T) {
 	s := newTestStore(t)
 	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 0})
