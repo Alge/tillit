@@ -91,10 +91,19 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 			return
 		}
 
+		payload, err := models.ParsePayload([]byte(input.Payload))
+		if err != nil {
+			http.Error(w, "Invalid payload JSON", http.StatusBadRequest)
+			return
+		}
+		if err := payload.Validate(); err != nil {
+			http.Error(w, "Invalid payload: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		// Revocations must be authorised before the signature is stored:
 		// the signer can only revoke their own signatures.
-		payload, err := models.ParsePayload([]byte(input.Payload))
-		if err == nil && payload.IsRevocation() {
+		if payload.IsRevocation() {
 			notFound, forbidden, internalErr := authorizeSignatureRevocation(database, payload.TargetID, userID)
 			if internalErr != nil {
 				log.Printf("authorizeSignatureRevocation failed: %v", internalErr)
@@ -126,7 +135,7 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 			return
 		}
 
-		if payload != nil && payload.IsRevocation() {
+		if payload.IsRevocation() {
 			processRevocation(database, payload, uploadedAt)
 		}
 

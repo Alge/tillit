@@ -48,6 +48,12 @@ type sigRequest struct {
 	Sig       string `json:"sig"`
 }
 
+// decisionPayload builds a minimal valid decision payload for tests so
+// the server-side payload.Validate() check is satisfied.
+func decisionPayload(signerID, pkg, version string) string {
+	return `{"type":"decision","signer":"` + signerID + `","ecosystem":"go","package_id":"` + pkg + `","version":"` + version + `","level":"vetted"}`
+}
+
 func signPayload(t *testing.T, signer crypto.Signer, payload string) sigRequest {
 	t.Helper()
 	sigBytes, err := signer.Sign([]byte(payload))
@@ -67,7 +73,7 @@ func TestCreateSignatureHandler_Success(t *testing.T) {
 	db := newTestDB(t)
 	u, signer := createTestUser(t, db)
 
-	payload := `{"type":"vetted","package":"example@1.0.0"}`
+	payload := decisionPayload(u.ID, "example", "v1.0.0")
 	body, _ := json.Marshal(signPayload(t, signer, payload))
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/users/"+u.ID+"/signatures", bytes.NewReader(body))
@@ -110,6 +116,24 @@ func TestCreateSignatureHandler_UserNotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestCreateSignatureHandler_RejectsInvalidPayload(t *testing.T) {
+	db := newTestDB(t)
+	u, signer := createTestUser(t, db)
+
+	// Decision payload missing required version + ecosystem fields.
+	bogus := `{"type":"decision","signer":"` + u.ID + `","level":"vetted"}`
+	body, _ := json.Marshal(signPayload(t, signer, bogus))
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/users/"+u.ID+"/signatures", bytes.NewReader(body))
+	req.SetPathValue("id", u.ID)
+	w := httptest.NewRecorder()
+	handlers.CreateSignatureHandler(db)(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for structurally-invalid payload, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -156,7 +180,7 @@ func TestGetUserSignaturesHandler_Success(t *testing.T) {
 	db := newTestDB(t)
 	u, signer := createTestUser(t, db)
 
-	payload := `{"type":"vetted","package":"foo@1.0.0"}`
+	payload := decisionPayload(u.ID, "foo", "v1.0.0")
 	body, _ := json.Marshal(signPayload(t, signer, payload))
 
 	createReq := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
@@ -200,7 +224,7 @@ func TestGetUserSignaturesHandler_Since(t *testing.T) {
 	}
 
 	// Upload a recent one via the handler
-	payload := `{"type":"vetted","package":"bar@2.0.0"}`
+	payload := decisionPayload(u.ID, "bar", "v2.0.0")
 	body, _ := json.Marshal(signPayload(t, signer, payload))
 	createReq := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
 	createReq.SetPathValue("id", u.ID)
