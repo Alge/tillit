@@ -86,5 +86,7 @@ commands:
   query <ecosystem> <pkg> [--verbose]
                               show trusted versions of a package, grouped by status
   inspect <signature_id>      show full details of a cached signature (accepts a hash prefix)
-  check <lockfile>            check every package in a lockfile against the trust graph`)
+  check [-e <ecosystem>] [path]
+                              check every package against the trust graph
+                              (path defaults to '.'; ecosystem required until .tillit lands)`)
 }

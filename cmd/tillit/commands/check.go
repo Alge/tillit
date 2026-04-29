@@ -19,12 +19,27 @@ var adapters = []ecosystems.Adapter{
 }
 
 func Check(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: tillit check <lockfile>")
+	ecosystem, target, err := parseCheckArgs(args)
+	if err != nil {
+		return err
 	}
-	lockfile := args[0]
 
-	adapter, err := pickAdapter(lockfile)
+	if ecosystem == "" {
+		return fmt.Errorf("ecosystem is required (known: %s)\n  example: tillit check -e go\n  (a future .tillit project file will let you omit this)",
+			knownEcosystems())
+	}
+
+	candidates := adaptersForEcosystem(ecosystem)
+	if len(candidates) == 0 {
+		return fmt.Errorf("unknown ecosystem %q (known: %s)", ecosystem, knownEcosystems())
+	}
+
+	lockfile, err := resolveCheckTarget(target, candidates)
+	if err != nil {
+		return err
+	}
+
+	adapter, err := pickAdapterFrom(lockfile, candidates)
 	if err != nil {
 		return err
 	}
@@ -88,15 +103,127 @@ func Check(args []string) error {
 	return nil
 }
 
-func pickAdapter(lockfile string) (ecosystems.Adapter, error) {
-	base := filepath.Base(lockfile)
+// parseCheckArgs extracts the optional ecosystem (-e / --ecosystem) and
+// path positional from raw args. Both default to empty strings — the
+// caller decides whether to require ecosystem (until .tillit support
+// lands, the caller does require it). Path defaults to "." when the
+// positional is missing.
+func parseCheckArgs(args []string) (ecosystem, target string, err error) {
+	target = "."
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-e" || a == "--ecosystem":
+			if i+1 >= len(args) {
+				return "", "", fmt.Errorf("%s requires a value (e.g. %s go)", a, a)
+			}
+			ecosystem = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--ecosystem="):
+			ecosystem = strings.TrimPrefix(a, "--ecosystem=")
+		case strings.HasPrefix(a, "-e="):
+			ecosystem = strings.TrimPrefix(a, "-e=")
+		case strings.HasPrefix(a, "-"):
+			return "", "", fmt.Errorf("unknown flag %q", a)
+		default:
+			target = a
+		}
+	}
+	return ecosystem, target, nil
+}
+
+// adaptersForEcosystem returns the adapters whose Ecosystem() matches.
+// Multiple adapters can serve the same ecosystem (different lockfile
+// formats); all of them are returned so the lockfile resolver can
+// match on filename.
+func adaptersForEcosystem(ecosystem string) []ecosystems.Adapter {
+	var out []ecosystems.Adapter
 	for _, a := range adapters {
+		if a.Ecosystem() == ecosystem {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func knownEcosystems() string {
+	seen := map[string]bool{}
+	var out []string
+	for _, a := range adapters {
+		if seen[a.Ecosystem()] {
+			continue
+		}
+		seen[a.Ecosystem()] = true
+		out = append(out, a.Ecosystem())
+	}
+	return strings.Join(out, ", ")
+}
+
+// resolveCheckTarget interprets the user's path: a directory means
+// "discover the lockfile inside"; a file path means "use it directly".
+// Either way the resolved file is checked against the candidate
+// adapter list so a wrong ecosystem fails loudly.
+func resolveCheckTarget(target string, candidates []ecosystems.Adapter) (string, error) {
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", fmt.Errorf("cannot read %q: %w", target, err)
+	}
+	if !info.IsDir() {
+		return target, nil
+	}
+	return findLockfile(target, candidates)
+}
+
+// findLockfile scans dir (one level — no recursion) for files matching
+// any candidate adapter. Returns the path to the lockfile if exactly
+// one matches; otherwise errors with enough context for the user.
+func findLockfile(dir string, candidates []ecosystems.Adapter) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", fmt.Errorf("read %q: %w", dir, err)
+	}
+	var matches []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		for _, a := range candidates {
+			if a.CanParse(name) {
+				matches = append(matches, filepath.Join(dir, name))
+				break
+			}
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("no lockfile found in %q for ecosystem (looked for: %s)",
+			dir, candidateFormats(candidates))
+	case 1:
+		return matches[0], nil
+	default:
+		return "", fmt.Errorf("multiple lockfiles found in %q: %s — pass one explicitly",
+			dir, strings.Join(matches, ", "))
+	}
+}
+
+func pickAdapterFrom(lockfile string, candidates []ecosystems.Adapter) (ecosystems.Adapter, error) {
+	base := filepath.Base(lockfile)
+	for _, a := range candidates {
 		if a.CanParse(base) {
 			return a, nil
 		}
 	}
-	return nil, fmt.Errorf("no adapter recognises %q (known formats: %s)",
-		base, knownFormats())
+	return nil, fmt.Errorf("no adapter for %q in the requested ecosystem (formats: %s)",
+		base, candidateFormats(candidates))
+}
+
+func candidateFormats(adapters []ecosystems.Adapter) string {
+	out := make([]string, len(adapters))
+	for i, a := range adapters {
+		out[i] = a.Name()
+	}
+	return strings.Join(out, ", ")
 }
 
 func knownFormats() string {

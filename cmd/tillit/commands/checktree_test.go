@@ -2,6 +2,8 @@ package commands
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -135,16 +137,95 @@ func TestFormatSummary_SplitsDirectAndIndirect(t *testing.T) {
 	}
 }
 
-func TestFormatSummary_SkipsZeroCounts(t *testing.T) {
+func TestFormatSummary_AlwaysShowsAllStatuses(t *testing.T) {
 	rows := []row{
 		mkRow("a", "v1", true, resolver.StatusUnknown),
 	}
 	got := formatSummary(rows)
-	if strings.Contains(got, "0 rejected") || strings.Contains(got, "0 vetted") {
-		t.Errorf("expected zero-count statuses to be hidden, got:\n%s", got)
+	for _, want := range []string{"0 rejected", "1 unknown", "0 allowed", "0 vetted"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in summary, got:\n%s", want, got)
+		}
 	}
-	if !strings.Contains(got, "1 unknown") {
-		t.Errorf("expected non-zero count present, got:\n%s", got)
+}
+
+func TestFindLockfile_SingleMatch(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, dir, "go.sum", "")
+	mustWrite(t, dir, "README.md", "") // ignored
+
+	got, err := findLockfile(dir, adapters)
+	if err != nil {
+		t.Fatalf("findLockfile failed: %v", err)
+	}
+	if filepath.Base(got) != "go.sum" {
+		t.Errorf("expected go.sum, got %q", got)
+	}
+}
+
+func TestFindLockfile_NoMatch(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, dir, "README.md", "")
+
+	_, err := findLockfile(dir, adapters)
+	if err == nil {
+		t.Error("expected error when no lockfile present")
+	}
+}
+
+func TestFindLockfile_IgnoresSubdirs(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "go.sum"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	_, err := findLockfile(dir, adapters)
+	if err == nil {
+		t.Error("a subdirectory named go.sum should not count as a lockfile")
+	}
+}
+
+func TestParseCheckArgs(t *testing.T) {
+	cases := []struct {
+		name           string
+		args           []string
+		wantEcosystem  string
+		wantTarget     string
+		wantErr        bool
+	}{
+		{"empty defaults", nil, "", ".", false},
+		{"path only", []string{"./somedir"}, "", "./somedir", false},
+		{"flag short", []string{"-e", "go"}, "go", ".", false},
+		{"flag long", []string{"--ecosystem", "go"}, "go", ".", false},
+		{"flag long equals", []string{"--ecosystem=go"}, "go", ".", false},
+		{"flag short equals", []string{"-e=go"}, "go", ".", false},
+		{"flag plus path", []string{"-e", "go", "./d"}, "go", "./d", false},
+		{"path then flag", []string{"./d", "-e", "go"}, "go", "./d", false},
+		{"missing flag value", []string{"-e"}, "", "", true},
+		{"unknown flag", []string{"--bogus"}, "", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eco, tgt, err := parseCheckArgs(tc.args)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if eco != tc.wantEcosystem {
+				t.Errorf("ecosystem = %q, want %q", eco, tc.wantEcosystem)
+			}
+			if tgt != tc.wantTarget {
+				t.Errorf("target = %q, want %q", tgt, tc.wantTarget)
+			}
+		})
+	}
+}
+
+func mustWrite(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
 	}
 }
 
