@@ -34,6 +34,7 @@ var adapters = []ecosystems.Adapter{
 	pypi.PipfileLock{},
 	pypi.PdmLock{},
 	hexpm.MixLock{},
+	hexpm.GleamManifest{},
 	cargo.CargoLock{},
 	composer.ComposerLock{},
 	nuget.PackagesLock{},
