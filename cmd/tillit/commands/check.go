@@ -16,6 +16,7 @@ import (
 	"github.com/Alge/tillit/ecosystems/nuget"
 	"github.com/Alge/tillit/ecosystems/pub"
 	"github.com/Alge/tillit/ecosystems/pypi"
+	"github.com/Alge/tillit/ecosystems/rubygems"
 	"github.com/Alge/tillit/resolver"
 )
 
@@ -34,6 +35,7 @@ var adapters = []ecosystems.Adapter{
 	composer.ComposerLock{},
 	nuget.PackagesLock{},
 	pub.PubspecLock{},
+	rubygems.GemfileLock{},
 }
 
 func Check(args []string) error {
