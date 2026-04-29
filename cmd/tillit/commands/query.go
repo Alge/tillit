@@ -93,7 +93,7 @@ func verboseDecisionLine(d resolver.ContributingDecision) string {
 
 	out := head + " " + by
 	if d.SignatureID != "" {
-		out += " [" + shortHash(d.SignatureID) + "]"
+		out += " " + shortHash(d.SignatureID)
 	}
 	if d.Reason != "" {
 		out += ": " + d.Reason
@@ -101,15 +101,17 @@ func verboseDecisionLine(d resolver.ContributingDecision) string {
 	return out
 }
 
-// shortHash returns the leading hex chars of a content-hash signature
-// ID — long enough to be unambiguous in practice (4 billion signatures
-// would still have <0.0006 collision probability for an 8-char prefix)
-// and short enough to fit in CLI output. Pass to `inspect` to expand.
+// shortHash returns a `#`-prefixed 12-char hex prefix of a content-hash
+// signature ID. 48 bits gives a birthday-collision ceiling of millions of
+// signatures, well past any realistic per-user store. The `#` prefix
+// makes the hash visually distinct so it can be copy-pasted directly
+// into the future `inspect` command.
 func shortHash(id string) string {
-	if len(id) <= 8 {
-		return id
+	const n = 12
+	if len(id) <= n {
+		return "#" + id
 	}
-	return id[:8]
+	return "#" + id[:n]
 }
 
 func shortPath(p []string) []string {
