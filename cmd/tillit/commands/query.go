@@ -121,17 +121,17 @@ func verboseDecisionLine(d resolver.ContributingDecision) string {
 	return out
 }
 
-// shortHash returns a `#`-prefixed 12-char hex prefix of a content-hash
-// signature ID. 48 bits gives a birthday-collision ceiling of millions of
-// signatures, well past any realistic per-user store. The `#` prefix
-// makes the hash visually distinct so it can be copy-pasted directly
-// into the future `inspect` command.
+// shortHash returns a 12-char hex prefix of a content-hash signature ID.
+// 48 bits gives a birthday-collision ceiling of millions of signatures,
+// well past any realistic per-user store. No leading sigil — Git-style:
+// context (column position, the word "by" preceding it) tells the reader
+// it's a hash, and a bare hex string survives shell paste without quoting.
 func shortHash(id string) string {
 	const n = 12
 	if len(id) <= n {
-		return "#" + id
+		return id
 	}
-	return "#" + id[:n]
+	return id[:n]
 }
 
 func shortPath(p []string) []string {
