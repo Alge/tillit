@@ -72,9 +72,18 @@ type VersionSpan struct {
 	Decisions []ContributingDecision
 }
 
+// DecisionKind distinguishes exact-version decisions from deltas.
+type DecisionKind string
+
+const (
+	KindExact DecisionKind = "exact"
+	KindDelta DecisionKind = "delta"
+)
+
 // ContributingDecision is one signed decision from one signer in the trust
 // graph that contributed to a verdict. Path traces the trust chain from
-// the viewer to the signer.
+// the viewer to the signer; Kind plus the version fields describe what
+// the signature actually said.
 type ContributingDecision struct {
 	SignerID    string
 	Path        []string // viewer → A → B → SignerID
@@ -82,4 +91,12 @@ type ContributingDecision struct {
 	Reason      string
 	SignatureID string
 	VetoOnly    bool // the path included a veto-only edge
+
+	// Kind reports whether this was an exact-version decision or a
+	// delta. For Exact, only Version is set; for Delta, FromVersion
+	// and ToVersion are set.
+	Kind        DecisionKind
+	Version     string // KindExact: the version this decision is about
+	FromVersion string // KindDelta: the from end of the delta
+	ToVersion   string // KindDelta: the to end of the delta
 }

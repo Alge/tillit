@@ -9,10 +9,20 @@ import (
 )
 
 func Query(args []string) error {
-	if len(args) != 2 {
-		return fmt.Errorf("usage: tillit query <ecosystem> <package_id>")
+	verbose := false
+	positional := args[:0]
+	for _, a := range args {
+		switch a {
+		case "--verbose", "-v":
+			verbose = true
+		default:
+			positional = append(positional, a)
+		}
 	}
-	ecosystem, packageID := args[0], args[1]
+	if len(positional) != 2 {
+		return fmt.Errorf("usage: tillit query <ecosystem> <package_id> [--verbose]")
+	}
+	ecosystem, packageID := positional[0], positional[1]
 
 	s, err := openStore()
 	if err != nil {
@@ -39,13 +49,61 @@ func Query(args []string) error {
 
 	fmt.Printf("Versions for %s/%s:\n", ecosystem, packageID)
 	for _, span := range pv.Spans {
-		label := span.From
-		if span.From != span.To {
-			label = span.From + " — " + span.To
-		}
-		fmt.Printf("  %-22s %s%s\n", label, span.Status, decisionsSummary(span.Decisions))
+		printSpan(span, verbose)
 	}
 	return nil
+}
+
+func printSpan(span resolver.VersionSpan, verbose bool) {
+	label := span.From
+	if span.From != span.To {
+		label = span.From + " — " + span.To
+	}
+	if !verbose {
+		fmt.Printf("  %-22s %s%s\n", label, span.Status, decisionsSummary(span.Decisions))
+		return
+	}
+	fmt.Printf("  %-22s %s\n", label, span.Status)
+	for _, d := range span.Decisions {
+		fmt.Println("    " + verboseDecisionLine(d))
+	}
+}
+
+// verboseDecisionLine renders one ContributingDecision in detail: the
+// signature kind (exact/delta), level, signer, trust path (when
+// transitive), and reason (when present).
+func verboseDecisionLine(d resolver.ContributingDecision) string {
+	var head string
+	switch d.Kind {
+	case resolver.KindExact:
+		head = fmt.Sprintf("%s @ %s", d.Level, d.Version)
+	case resolver.KindDelta:
+		head = fmt.Sprintf("%s delta %s → %s", d.Level, d.FromVersion, d.ToVersion)
+	default:
+		head = d.Level
+	}
+
+	by := "by " + shortID(d.SignerID)
+	if d.VetoOnly {
+		by += " (veto-only)"
+	}
+	if len(d.Path) > 1 {
+		by += " via " + strings.Join(shortPath(d.Path[:len(d.Path)-1]), " → ")
+	}
+
+	out := head + " " + by
+	if d.Reason != "" {
+		out += ": " + d.Reason
+	}
+	return out
+}
+
+func shortPath(p []string) []string {
+	out := make([]string, len(p))
+	for i, id := range p {
+		out[i] = shortID(id)
+	}
+	return out
 }
 
 // decisionsSummary returns a short suffix listing the signers (and reasons,
