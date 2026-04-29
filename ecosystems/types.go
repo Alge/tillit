@@ -80,6 +80,13 @@ type Adapter interface {
 	// rule. Used by the resolver for output ordering and by sign-diff
 	// to verify that FromVersion precedes ToVersion.
 	CompareVersions(a, b string) int
+
+	// ValidateVersion reports whether the string is a syntactically
+	// valid version for this ecosystem. Sign commands call it before
+	// recording a decision so typos like "v.3.0.0" are caught at the
+	// CLI rather than ending up in the trust store. Returns nil if the
+	// version is valid; otherwise an error describing the problem.
+	ValidateVersion(v string) error
 }
 
 // GraphResolver is an optional adapter capability: it returns the full

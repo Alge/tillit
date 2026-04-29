@@ -42,6 +42,12 @@ func signVersion(args []string) error {
 		return err
 	}
 
+	if a, ok := adapterForEcosystem(ecosystem); ok {
+		if err := a.ValidateVersion(version); err != nil {
+			return fmt.Errorf("invalid version: %w", err)
+		}
+	}
+
 	s, err := openStore()
 	if err != nil {
 		return err
@@ -86,6 +92,12 @@ func signDelta(args []string) error {
 	}
 
 	if a, ok := adapterForEcosystem(ecosystem); ok {
+		if err := a.ValidateVersion(from); err != nil {
+			return fmt.Errorf("invalid from version: %w", err)
+		}
+		if err := a.ValidateVersion(to); err != nil {
+			return fmt.Errorf("invalid to version: %w", err)
+		}
 		if a.CompareVersions(from, to) >= 0 {
 			return fmt.Errorf("from version %s must precede to version %s in %s ordering",
 				from, to, ecosystem)
