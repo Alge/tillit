@@ -45,6 +45,28 @@ func promptPasswordTwice(firstPrompt, secondPrompt string) ([]byte, error) {
 	return a, nil
 }
 
+// confirmReader is the swappable backend behind promptLine — used
+// for non-secret text confirmations (typing a key name back to
+// authorise its destruction, etc.). Tests replace it the same way
+// they replace passwordReader.
+var confirmReader func(prompt string) ([]byte, error) = readLineFromTerminal
+
+// promptLine prints prompt to stderr and returns whatever the
+// underlying reader supplies, with trailing CR/LF trimmed. Visible
+// echo — do NOT use for passwords.
+func promptLine(prompt string) (string, error) {
+	line, err := confirmReader(prompt)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes.TrimRight(line, "\r\n")), nil
+}
+
+func readLineFromTerminal(prompt string) ([]byte, error) {
+	fmt.Fprint(os.Stderr, prompt)
+	return readLine(stdinReader)
+}
+
 // stdinReader is a single bufio.Reader bound to os.Stdin. We can't
 // make a fresh one on every call: bufio buffers ahead, so a discarded
 // reader takes already-read bytes with it, breaking subsequent reads

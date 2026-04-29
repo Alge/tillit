@@ -78,6 +78,7 @@ commands:
   key show <name>             show the public key for a named key
   key use <name>              set the active key
   key passwd <name>           change or remove the password protecting a stored key
+  key remove <name>           PERMANENTLY delete a stored key (requires confirmation; back it up first!)
   register <url> [alias]      register active key on a server
   trust <id@url> [--depth N] [--public] [--veto-only]
                               add or update a trusted peer
