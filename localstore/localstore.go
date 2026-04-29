@@ -108,6 +108,33 @@ func (s *Store) ListKeys() ([]*Key, error) {
 	return keys, nil
 }
 
+// DeleteKey removes the named key from the store. Returns an error
+// if no row matched, so callers can distinguish "deleted" from
+// "didn't exist". Used by `tillit key remove`. The active-key
+// pointer in the config table is intentionally left alone — callers
+// who care must call ClearActiveKey.
+func (s *Store) DeleteKey(name string) error {
+	res, err := s.db.Exec(`DELETE FROM keys WHERE name = ?`, name)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("key %q not found", name)
+	}
+	return nil
+}
+
+// ClearActiveKey removes the active-key pointer (used after deleting
+// the currently-active key). Idempotent — no-op if not set.
+func (s *Store) ClearActiveKey() error {
+	_, err := s.db.Exec(`DELETE FROM config WHERE key = 'active_key'`)
+	return err
+}
+
 func (s *Store) SetActiveKey(name string) error {
 	_, err := s.db.Exec(
 		`INSERT INTO config (key, value) VALUES ('active_key', ?)

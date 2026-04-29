@@ -90,6 +90,41 @@ func TestActiveKey(t *testing.T) {
 	}
 }
 
+func TestDeleteKey(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SaveKey(&localstore.Key{
+		Name: "alice", Algorithm: "ed25519", PubKey: "pk", PrivKey: "sk",
+	}); err != nil {
+		t.Fatalf("SaveKey: %v", err)
+	}
+	if err := s.DeleteKey("alice"); err != nil {
+		t.Fatalf("DeleteKey: %v", err)
+	}
+	if _, err := s.GetKey("alice"); err == nil {
+		t.Error("expected key gone after delete")
+	}
+	// Deleting a missing key surfaces an error.
+	if err := s.DeleteKey("nope"); err == nil {
+		t.Error("expected error deleting nonexistent key")
+	}
+}
+
+func TestClearActiveKey(t *testing.T) {
+	s := newTestStore(t)
+	s.SaveKey(&localstore.Key{Name: "k", Algorithm: "ed25519", PubKey: "pk", PrivKey: "sk"})
+	s.SetActiveKey("k")
+	if err := s.ClearActiveKey(); err != nil {
+		t.Fatalf("ClearActiveKey: %v", err)
+	}
+	if _, err := s.GetActiveKey(); err == nil {
+		t.Error("expected no-active-key after Clear")
+	}
+	// Idempotent — calling again is fine.
+	if err := s.ClearActiveKey(); err != nil {
+		t.Errorf("ClearActiveKey should be idempotent, got: %v", err)
+	}
+}
+
 func TestActiveKey_NoActiveKey(t *testing.T) {
 	s := newTestStore(t)
 	_, err := s.GetActiveKey()
