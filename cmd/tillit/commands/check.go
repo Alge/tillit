@@ -9,6 +9,7 @@ import (
 
 	"github.com/Alge/tillit/ecosystems"
 	"github.com/Alge/tillit/ecosystems/gosum"
+	"github.com/Alge/tillit/ecosystems/npmlock"
 	"github.com/Alge/tillit/resolver"
 )
 
@@ -16,6 +17,7 @@ import (
 // a new ecosystem is a one-line change here plus the adapter package.
 var adapters = []ecosystems.Adapter{
 	gosum.GoSum{},
+	npmlock.NpmLock{},
 }
 
 func Check(args []string) error {
