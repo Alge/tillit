@@ -2,10 +2,12 @@ package commands
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
 
+	tillit_crypto "github.com/Alge/tillit/crypto"
 	"github.com/Alge/tillit/localstore"
 )
 
@@ -51,7 +53,7 @@ func TestExport_RoundTrip(t *testing.T) {
 	src := newInspectStore(t)
 	seedExportFixture(t, src)
 
-	doc, err := buildExportDoc(src, true)
+	doc, err := buildExportDoc(src, scopeAll, "")
 	if err != nil {
 		t.Fatalf("buildExportDoc: %v", err)
 	}
@@ -150,9 +152,9 @@ func TestExport_DefaultScopeIsOwnDataOnly(t *testing.T) {
 		ID: "alice", Username: "alice", PubKey: "pk", Algorithm: "ed25519", FetchedAt: now,
 	})
 
-	doc, err := buildExportDoc(src, false)
+	doc, err := buildExportDoc(src, scopeSelf, "")
 	if err != nil {
-		t.Fatalf("buildExportDoc(scope=mine): %v", err)
+		t.Fatalf("buildExportDoc(scope=self): %v", err)
 	}
 	if len(doc.CachedSignatures) != 1 || doc.CachedSignatures[0].ID != "mine" {
 		t.Errorf("expected only my signature, got %+v", doc.CachedSignatures)
@@ -165,7 +167,7 @@ func TestExport_DefaultScopeIsOwnDataOnly(t *testing.T) {
 	}
 
 	// --all should pull everything in.
-	docAll, err := buildExportDoc(src, true)
+	docAll, err := buildExportDoc(src, scopeAll, "")
 	if err != nil {
 		t.Fatalf("buildExportDoc(scope=all): %v", err)
 	}
@@ -177,6 +179,124 @@ func TestExport_DefaultScopeIsOwnDataOnly(t *testing.T) {
 	}
 	if len(docAll.CachedUsers) != 1 {
 		t.Errorf("--all should include cached_users, got %d", len(docAll.CachedUsers))
+	}
+}
+
+// TestExport_IncludePeers_ScopeFollowsTrustGraph: with
+// --include-peers, the export must include cached signatures and
+// connections by every signer reachable in the active identity's
+// trust graph (direct + transitive), and the cached_users entries
+// for those signers — but nothing for unrelated peers.
+func TestExport_IncludePeers_ScopeFollowsTrustGraph(t *testing.T) {
+	src := newInspectStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	myID, err := makeActiveSigner(t, src)
+	if err != nil {
+		t.Fatalf("makeActiveSigner: %v", err)
+	}
+
+	// Trust graph: me → alice (direct, depth 1) → bob (transitive)
+	// stranger is not reachable.
+	if err := src.SavePeer(&localstore.Peer{
+		ID: "alice", ServerURL: "https://x", TrustDepth: 1,
+	}); err != nil {
+		t.Fatalf("SavePeer: %v", err)
+	}
+	// alice → bob connection (cached_connection by alice).
+	src.SaveCachedConnection(&localstore.CachedConnection{
+		ID: "alice-bob", Signer: "alice", OtherID: "bob",
+		Payload:   `{"type":"connection","signer":"alice","other_id":"bob","trust":true,"public":true,"trust_extends":0}`,
+		Algorithm: "ed25519", Sig: "x", CreatedAt: now, FetchedAt: now,
+	})
+
+	// Sigs by people in and out of the trust graph.
+	src.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "mine", Signer: myID, Payload: "{}", Algorithm: "ed25519", Sig: "x",
+		UploadedAt: now, FetchedAt: now,
+	})
+	src.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "alices", Signer: "alice", Payload: "{}", Algorithm: "ed25519", Sig: "x",
+		UploadedAt: now, FetchedAt: now,
+	})
+	src.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "bobs", Signer: "bob", Payload: "{}", Algorithm: "ed25519", Sig: "x",
+		UploadedAt: now, FetchedAt: now,
+	})
+	src.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "strangers", Signer: "stranger", Payload: "{}", Algorithm: "ed25519", Sig: "x",
+		UploadedAt: now, FetchedAt: now,
+	})
+
+	// cached_users for everyone — only the in-graph ones should
+	// survive the filter.
+	for _, id := range []string{"alice", "bob", "stranger"} {
+		src.SaveCachedUser(&localstore.CachedUser{
+			ID: id, Username: id, PubKey: "pk", Algorithm: "ed25519", FetchedAt: now,
+		})
+	}
+
+	doc, err := buildExportDoc(src, scopeIncludePeers, "")
+	if err != nil {
+		t.Fatalf("buildExportDoc(include-peers): %v", err)
+	}
+
+	gotSigs := map[string]bool{}
+	for _, sig := range doc.CachedSignatures {
+		gotSigs[sig.ID] = true
+	}
+	for _, want := range []string{"mine", "alices", "bobs"} {
+		if !gotSigs[want] {
+			t.Errorf("expected %q in export (in trust graph), got %v", want, gotSigs)
+		}
+	}
+	if gotSigs["strangers"] {
+		t.Errorf("stranger's sig must NOT be in include-peers export, got %v", gotSigs)
+	}
+
+	gotUsers := map[string]bool{}
+	for _, u := range doc.CachedUsers {
+		gotUsers[u.ID] = true
+	}
+	for _, want := range []string{"alice", "bob"} {
+		if !gotUsers[want] {
+			t.Errorf("expected cached_user %q in export, got %v", want, gotUsers)
+		}
+	}
+	if gotUsers["stranger"] {
+		t.Errorf("stranger must NOT be in cached_users export, got %v", gotUsers)
+	}
+}
+
+// TestExport_NamedKeyRestrictsKeysArray: --key picks a specific
+// stored key by name and the keys array contains only that key.
+func TestExport_NamedKeyRestrictsKeysArray(t *testing.T) {
+	src := newInspectStore(t)
+	if _, err := makeActiveSigner(t, src); err != nil {
+		t.Fatalf("makeActiveSigner: %v", err)
+	}
+	// Add a second key with real Ed25519 bytes.
+	signer2, err := tillit_crypto.NewEd25519Signer()
+	if err != nil {
+		t.Fatalf("NewEd25519Signer: %v", err)
+	}
+	if err := src.SaveKey(&localstore.Key{
+		Name: "personal", Algorithm: "ed25519",
+		PubKey:  base64.RawURLEncoding.EncodeToString(signer2.PublicKey()),
+		PrivKey: base64.RawURLEncoding.EncodeToString(signer2.PrivateKey()),
+	}); err != nil {
+		t.Fatalf("SaveKey: %v", err)
+	}
+
+	doc, err := buildExportDoc(src, scopeSelf, "personal")
+	if err != nil {
+		t.Fatalf("buildExportDoc(--key personal): %v", err)
+	}
+	if len(doc.Keys) != 1 || doc.Keys[0].Name != "personal" {
+		t.Errorf("expected only the personal key in keys array, got %+v", doc.Keys)
+	}
+	if doc.ActiveKey != "personal" {
+		t.Errorf("active_key should be the named key 'personal', got %q", doc.ActiveKey)
 	}
 }
 
@@ -213,7 +333,7 @@ func makeActiveSigner(t *testing.T, s *localstore.Store) (string, error) {
 func TestImport_IsIdempotent(t *testing.T) {
 	src := newInspectStore(t)
 	seedExportFixture(t, src)
-	doc, err := buildExportDoc(src, true)
+	doc, err := buildExportDoc(src, scopeAll, "")
 	if err != nil {
 		t.Fatalf("buildExportDoc: %v", err)
 	}
@@ -282,7 +402,7 @@ func TestImport_DoesNotClobberLocalRevocations(t *testing.T) {
 	})
 
 	// Take a snapshot BEFORE the revocation.
-	before, err := buildExportDoc(src, true)
+	before, err := buildExportDoc(src, scopeAll, "")
 	if err != nil {
 		t.Fatalf("buildExportDoc: %v", err)
 	}
