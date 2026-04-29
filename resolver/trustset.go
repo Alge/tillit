@@ -15,6 +15,37 @@ type trustEntry struct {
 	VetoOnly bool     // any edge in the path was veto-only
 }
 
+// TrustEntry describes one reachable signer in the viewer's trust set.
+// Path traces the route from the viewer to the signer (not including
+// the viewer themselves). A zero-length Path means the entry IS the
+// viewer; length 1 means a direct peer; length ≥ 2 is transitive.
+type TrustEntry struct {
+	SignerID string
+	Path     []string
+	VetoOnly bool
+}
+
+// TrustSet returns every signer reachable from viewer through the
+// trust graph, including the viewer themselves. Used by status output
+// to show "how big is my effective trust web?" and by callers that
+// need read-only access to the resolved set without going through a
+// per-package query.
+func (r *Resolver) TrustSet(viewer string) ([]TrustEntry, error) {
+	raw, err := r.buildTrustSet(viewer)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TrustEntry, 0, len(raw))
+	for id, e := range raw {
+		out = append(out, TrustEntry{
+			SignerID: id,
+			Path:     append([]string(nil), e.Path...),
+			VetoOnly: e.VetoOnly,
+		})
+	}
+	return out, nil
+}
+
 // buildTrustSet performs a BFS from viewer outward, returning every
 // signer reachable within the trust depth limits. Direct edges from the
 // active local user come from the peers table (so veto-only / distrusted

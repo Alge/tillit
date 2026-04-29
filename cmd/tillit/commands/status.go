@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Alge/tillit/localstore"
+	"github.com/Alge/tillit/resolver"
 )
 
 // Status prints a summary of the local store: the active key, peer
@@ -40,7 +41,7 @@ func Status(args []string) error {
 	fmt.Printf("User ID:    %s\n", userID)
 	fmt.Println()
 
-	if err := printPeerSummary(s); err != nil {
+	if err := printPeerSummary(s, userID); err != nil {
 		return err
 	}
 	if err := printDataSummary(s, userID); err != nil {
@@ -49,7 +50,7 @@ func Status(args []string) error {
 	return printServerSummary(s, userID)
 }
 
-func printPeerSummary(s *localstore.Store) error {
+func printPeerSummary(s *localstore.Store, userID string) error {
 	peers, err := s.ListPeers()
 	if err != nil {
 		return fmt.Errorf("list peers: %w", err)
@@ -65,8 +66,28 @@ func printPeerSummary(s *localstore.Store) error {
 			trusted++
 		}
 	}
-	fmt.Printf("Peers: %d total (%d trusted, %d veto-only, %d distrusted)\n",
+	fmt.Printf("Peers: %d configured (%d trusted, %d veto-only, %d distrusted)\n",
 		len(peers), trusted, vetoOnly, distrusted)
+
+	r := resolver.New(s, userID)
+	entries, err := r.TrustSet(userID)
+	if err != nil {
+		return fmt.Errorf("compute trust set: %w", err)
+	}
+	direct, transitive := 0, 0
+	for _, e := range entries {
+		switch len(e.Path) {
+		case 0:
+			// the viewer themselves — not counted
+		case 1:
+			direct++
+		default:
+			transitive++
+		}
+	}
+	fmt.Printf("Trust set: %d reachable signers (%d direct, %d transitive)\n",
+		direct+transitive, direct, transitive)
+	fmt.Println()
 	return nil
 }
 
