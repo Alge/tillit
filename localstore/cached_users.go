@@ -65,6 +65,23 @@ func (s *Store) ListCachedUsers() ([]*CachedUser, error) {
 	return out, nil
 }
 
+// DeleteCachedUser removes the row with the given ID. Returns an
+// error if no row matched.
+func (s *Store) DeleteCachedUser(id string) error {
+	res, err := s.db.Exec(`DELETE FROM cached_users WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("cached user %q not found", id)
+	}
+	return nil
+}
+
 func (s *Store) GetCachedUser(id string) (*CachedUser, error) {
 	u := &CachedUser{}
 	var fetchedAtStr string

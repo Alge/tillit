@@ -97,6 +97,23 @@ func isConnectionRevocationFor(payload, targetID string) bool {
 	return p.Type == "connection_revocation" && p.TargetID == targetID
 }
 
+// DeleteCachedConnection removes the row with the given ID. Returns
+// an error if no row matched.
+func (s *Store) DeleteCachedConnection(id string) error {
+	res, err := s.db.Exec(`DELETE FROM cached_connections WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("cached connection %q not found", id)
+	}
+	return nil
+}
+
 func (s *Store) GetCachedConnection(id string) (*CachedConnection, error) {
 	return scanCachedConnection(s.db.QueryRow(
 		`SELECT id, signer, other_id, payload, algorithm, sig, created_at, revoked, revoked_at, fetched_at

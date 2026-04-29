@@ -38,6 +38,8 @@ func main() {
 		err = commands.Revoke(args)
 	case "delete":
 		err = commands.Delete(args)
+	case "clean":
+		err = commands.Clean(args)
 	case "sync":
 		err = commands.Sync(args)
 	case "publish":
@@ -92,6 +94,8 @@ commands:
   revoke <signature_id>       revoke a previously published decision
   delete <signature_id>       remove a locally-cached signature that has not yet been pushed
                               (use revoke instead once a signature is on a server)
+  clean                       prune cached rows from signers outside your trust graph
+                              (asks for confirmation; pruned data is gone unless you backed it up)
   sync                        pull signatures from all trusted peers into local cache
   publish                     push any locally-cached signatures to registered servers
   mirror push <server>        privately push your sigs+connections to your own server (cross-device backup)
