@@ -76,7 +76,7 @@ func Check(args []string) error {
 	}
 	defer s.Close()
 
-	_, userID, err := activeSignerAndID(s)
+	userID, err := activeUserID(s)
 	if err != nil {
 		return err
 	}

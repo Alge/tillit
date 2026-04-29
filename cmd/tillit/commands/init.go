@@ -1,11 +1,9 @@
 package commands
 
 import (
-	"encoding/base64"
 	"fmt"
 
 	"github.com/Alge/tillit/crypto"
-	"github.com/Alge/tillit/localstore"
 )
 
 func Init(args []string) error {
@@ -26,11 +24,9 @@ func Init(args []string) error {
 		return fmt.Errorf("failed generating key: %w", err)
 	}
 
-	key := &localstore.Key{
-		Name:      "default",
-		Algorithm: signer.Algorithm(),
-		PubKey:    base64.RawURLEncoding.EncodeToString(signer.PublicKey()),
-		PrivKey:   base64.RawURLEncoding.EncodeToString(signer.PrivateKey()),
+	key, err := buildStoredKey("default", signer)
+	if err != nil {
+		return err
 	}
 	if err := s.SaveKey(key); err != nil {
 		return fmt.Errorf("failed saving key: %w", err)
@@ -40,7 +36,7 @@ func Init(args []string) error {
 	}
 
 	fmt.Printf("Initialized tillit\n")
-	fmt.Printf("Active key: default (%s)\n", signer.Algorithm())
+	fmt.Printf("Active key: default (%s)\n", key.Algorithm)
 	fmt.Printf("Public key: %s\n", key.PubKey)
 	return nil
 }

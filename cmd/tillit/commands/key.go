@@ -11,7 +11,7 @@ import (
 
 func Key(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: tillit key <generate|list|show|use> [args]")
+		return fmt.Errorf("usage: tillit key <generate|list|show|use|passwd> [args]")
 	}
 	switch args[0] {
 	case "generate":
@@ -22,6 +22,8 @@ func Key(args []string) error {
 		return keyShow(args[1:])
 	case "use":
 		return keyUse(args[1:])
+	case "passwd":
+		return keyPasswd(args[1:])
 	default:
 		return fmt.Errorf("unknown key subcommand: %s", args[0])
 	}
@@ -48,11 +50,9 @@ func keyGenerate(args []string) error {
 	}
 	defer s.Close()
 
-	key := &localstore.Key{
-		Name:      name,
-		Algorithm: signer.Algorithm(),
-		PubKey:    base64.RawURLEncoding.EncodeToString(signer.PublicKey()),
-		PrivKey:   base64.RawURLEncoding.EncodeToString(signer.PrivateKey()),
+	key, err := buildStoredKey(name, signer)
+	if err != nil {
+		return err
 	}
 	if err := s.SaveKey(key); err != nil {
 		return fmt.Errorf("failed saving key: %w", err)
@@ -60,6 +60,93 @@ func keyGenerate(args []string) error {
 
 	fmt.Printf("Generated key '%s' (%s)\n", name, algorithm)
 	fmt.Printf("Public key: %s\n", key.PubKey)
+	return nil
+}
+
+// buildStoredKey turns a freshly-generated signer into a Key suitable
+// for SaveKey, prompting the user for an optional password. An empty
+// password leaves the private key in plaintext (with a printed
+// warning); a non-empty password produces an encrypted JSON envelope.
+func buildStoredKey(name string, signer crypto.Signer) (*localstore.Key, error) {
+	pwd, err := promptPasswordTwice(
+		fmt.Sprintf("Password for new key %q (empty to skip encryption): ", name),
+		"Confirm password: ",
+	)
+	if err != nil {
+		return nil, err
+	}
+	privField, err := encodePrivKeyField(signer.PrivateKey(), pwd)
+	if err != nil {
+		return nil, err
+	}
+	return &localstore.Key{
+		Name:      name,
+		Algorithm: signer.Algorithm(),
+		PubKey:    base64.RawURLEncoding.EncodeToString(signer.PublicKey()),
+		PrivKey:   privField,
+	}, nil
+}
+
+// encodePrivKeyField returns either a base64url-encoded plaintext
+// private key (when password is empty) or an EncryptKey envelope.
+// The plaintext path prints a warning so the user knows their key is
+// stored unprotected.
+func encodePrivKeyField(privBytes, password []byte) (string, error) {
+	if len(password) == 0 {
+		fmt.Fprintln(os.Stderr, "warning: storing private key unencrypted on disk")
+		return base64.RawURLEncoding.EncodeToString(privBytes), nil
+	}
+	envelope, err := crypto.EncryptKey(privBytes, password)
+	if err != nil {
+		return "", fmt.Errorf("encrypt key: %w", err)
+	}
+	return string(envelope), nil
+}
+
+// keyPasswd changes (or removes) the password protecting a stored
+// key. The user is prompted for the current password if the key is
+// encrypted, then for the new one (twice). An empty new password
+// stores the private key in plaintext.
+func keyPasswd(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: tillit key passwd <name>")
+	}
+	name := args[0]
+
+	s, err := openStore()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	k, err := s.GetKey(name)
+	if err != nil {
+		return err
+	}
+	plain, err := decodePrivateKey(k)
+	if err != nil {
+		return err
+	}
+	newPwd, err := promptPasswordTwice(
+		"New password (empty to remove encryption): ",
+		"Confirm new password: ",
+	)
+	if err != nil {
+		return err
+	}
+	encoded, err := encodePrivKeyField(plain, newPwd)
+	if err != nil {
+		return err
+	}
+	k.PrivKey = encoded
+	if err := s.SaveKey(k); err != nil {
+		return fmt.Errorf("save: %w", err)
+	}
+	if len(newPwd) == 0 {
+		fmt.Printf("Removed encryption from key %q\n", name)
+	} else {
+		fmt.Printf("Updated password on key %q\n", name)
+	}
 	return nil
 }
 

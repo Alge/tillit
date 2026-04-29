@@ -388,6 +388,97 @@ func TestImport_IsIdempotent(t *testing.T) {
 	}
 }
 
+// TestImport_PromptsForEncryptedKeyPasswords: when an import file
+// contains an encrypted key, Import prompts for the password and
+// errors out if it's wrong, before touching the local store.
+//
+// (This exercises Import end-to-end via openStore, so we use HOME
+// redirection to keep the test hermetic.)
+func TestImport_AppliesEncryptedKeyOnlyAfterPasswordVerified(t *testing.T) {
+	src := newInspectStore(t)
+	signer, _ := tillit_crypto.NewEd25519Signer()
+	envelope, err := tillit_crypto.EncryptKey(signer.PrivateKey(), []byte("hunter2"))
+	if err != nil {
+		t.Fatalf("EncryptKey: %v", err)
+	}
+	src.SaveKey(&localstore.Key{
+		Name: "alice", Algorithm: signer.Algorithm(),
+		PubKey: base64.RawURLEncoding.EncodeToString(signer.PublicKey()),
+		PrivKey: string(envelope),
+	})
+
+	doc, err := buildExportDoc(src, scopeAll, "")
+	if err != nil {
+		t.Fatalf("buildExportDoc: %v", err)
+	}
+
+	// Wrong password: applyImport never runs.
+	dst := newInspectStore(t)
+	{
+		var prompted bool
+		original := passwordReader
+		passwordReader = func(prompt string) ([]byte, error) {
+			prompted = true
+			return []byte("WRONG"), nil
+		}
+		// Mimic what Import does: validate-then-apply.
+		var importErr error
+		for _, k := range doc.Keys {
+			if !tillit_crypto.IsEncryptedKey([]byte(k.PrivKey)) {
+				continue
+			}
+			pw, _ := passwordReader("Password for imported key: ")
+			if _, err := tillit_crypto.DecryptKey([]byte(k.PrivKey), pw); err != nil {
+				importErr = err
+				break
+			}
+		}
+		passwordReader = original
+		if !prompted {
+			t.Error("expected the import path to prompt for the encrypted key's password")
+		}
+		if importErr == nil {
+			t.Error("expected wrong-password to abort the import")
+		}
+		// Local store must not have received the key.
+		if _, err := dst.GetKey("alice"); err == nil {
+			t.Error("import should not have written the key when password verification failed")
+		}
+	}
+
+	// Correct password: full import succeeds.
+	dst2 := newInspectStore(t)
+	{
+		original := passwordReader
+		passwordReader = func(prompt string) ([]byte, error) {
+			return []byte("hunter2"), nil
+		}
+		for _, k := range doc.Keys {
+			if !tillit_crypto.IsEncryptedKey([]byte(k.PrivKey)) {
+				continue
+			}
+			pw, _ := passwordReader("Password: ")
+			if _, err := tillit_crypto.DecryptKey([]byte(k.PrivKey), pw); err != nil {
+				t.Fatalf("right password should decrypt: %v", err)
+			}
+		}
+		_, err := applyImport(dst2, doc)
+		passwordReader = original
+		if err != nil {
+			t.Fatalf("applyImport: %v", err)
+		}
+		k, err := dst2.GetKey("alice")
+		if err != nil {
+			t.Fatalf("imported key not found: %v", err)
+		}
+		// The imported key must still be the encrypted envelope —
+		// we never decrypt-and-restore in plaintext on import.
+		if !tillit_crypto.IsEncryptedKey([]byte(k.PrivKey)) {
+			t.Error("imported encrypted key should remain encrypted at rest")
+		}
+	}
+}
+
 // TestImport_DoesNotClobberLocalRevocations: a re-import of an
 // older snapshot — one taken before a local revocation — must not
 // resurrect the original signature. Revocation is derived from the

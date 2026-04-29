@@ -170,6 +170,22 @@ func Import(args []string) error {
 			doc.Version, exportFormatVersion)
 	}
 
+	// Encrypted keys must have their password validated before we
+	// commit them to the local store — catches typos at import time
+	// rather than the next time the user tries to sign.
+	for _, k := range doc.Keys {
+		if !tillit_crypto.IsEncryptedKey([]byte(k.PrivKey)) {
+			continue
+		}
+		pw, err := promptPassword(fmt.Sprintf("Password for imported key %q: ", k.Name))
+		if err != nil {
+			return fmt.Errorf("read password for %q: %w", k.Name, err)
+		}
+		if _, err := tillit_crypto.DecryptKey([]byte(k.PrivKey), pw); err != nil {
+			return fmt.Errorf("key %q: %w", k.Name, err)
+		}
+	}
+
 	s, err := openStore()
 	if err != nil {
 		return err
