@@ -61,7 +61,13 @@ func (npmCommon) ResolveVersion(packageID, version string) (*ecosystems.VersionI
 }
 
 // parseRegistryResponse turns the per-version metadata JSON into a
-// VersionInfo. Split out for testability.
+// VersionInfo. Split out from ResolveVersion so the JSON-shape edge
+// cases — `{"error": ...}` payloads and responses missing the
+// `version` field — can be unit-tested without spinning up an
+// httptest server. Other adapters in the project inline the parse
+// step because their per-version JSON is straightforward; npm's is
+// the irregular one (integrity-vs-shasum branching, an inline error
+// field instead of a 404), so the extra surface earns its keep.
 func parseRegistryResponse(body []byte, packageID, version string) (*ecosystems.VersionInfo, error) {
 	var v struct {
 		Name    string `json:"name"`
