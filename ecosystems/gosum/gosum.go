@@ -8,9 +8,11 @@ package gosum
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -67,6 +69,62 @@ func (GoSum) Parse(fsys fs.FS, lockfilePath string) (ecosystems.ParseResult, err
 		Packages: pkgs,
 		Warnings: append(sumWarnings, modWarnings...),
 	}, nil
+}
+
+// Graph runs `go mod graph` from rootDir and parses the output into a
+// dependency-edge map keyed by "module@version". Each line of the
+// command's output is "A B" where A depends on B. The main module
+// itself appears as a bare module path (no @version); we leave that as
+// the implicit root, so its outgoing edges are the direct deps.
+//
+// Failures (no go binary, not a module, etc.) return (nil, warnings) so
+// the CLI can fall back to flat output without erroring.
+func (GoSum) Graph(rootDir string) (map[string][]string, []string) {
+	cmd := exec.Command("go", "mod", "graph")
+	cmd.Dir = rootDir
+	var out, errBuf bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		msg := fmt.Sprintf("go mod graph failed (%v); falling back to flat output", err)
+		if errBuf.Len() > 0 {
+			msg += ": " + strings.TrimSpace(errBuf.String())
+		}
+		return nil, []string{msg}
+	}
+	edges, parseWarn := parseModGraph(&out)
+	return edges, parseWarn
+}
+
+// parseModGraph reads "A B" lines from r and returns the edge map.
+// Duplicate B values for the same A are collapsed; output order of each
+// adjacency list follows first-seen order in the input.
+func parseModGraph(r io.Reader) (map[string][]string, []string) {
+	edges := map[string][]string{}
+	seen := map[string]map[string]bool{}
+	var warnings []string
+
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) != 2 {
+			continue
+		}
+		from, to := fields[0], fields[1]
+		if seen[from] == nil {
+			seen[from] = map[string]bool{}
+		}
+		if seen[from][to] {
+			continue
+		}
+		seen[from][to] = true
+		edges[from] = append(edges[from], to)
+	}
+	if err := scanner.Err(); err != nil {
+		warnings = append(warnings, fmt.Sprintf("read go mod graph output: %v", err))
+	}
+	return edges, warnings
 }
 
 func parseGoSum(r io.Reader) ([]ecosystems.PackageRef, []string, error) {
