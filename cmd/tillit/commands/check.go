@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Alge/tillit/ecosystems"
+	"github.com/Alge/tillit/ecosystems/composer"
 	"github.com/Alge/tillit/ecosystems/gosum"
 	"github.com/Alge/tillit/ecosystems/hexpm"
 	"github.com/Alge/tillit/ecosystems/npmlock"
@@ -26,6 +27,7 @@ var adapters = []ecosystems.Adapter{
 	pypi.PipfileLock{},
 	pypi.PdmLock{},
 	hexpm.MixLock{},
+	composer.ComposerLock{},
 }
 
 func Check(args []string) error {
