@@ -17,6 +17,13 @@ import (
 // Gemfury, packagecloud) that exposes the same endpoints.
 const defaultRubygemsURL = "https://rubygems.org"
 
+// maxResponseBytes caps the per-gem metadata read. The
+// /api/v1/versions/<name>.json endpoint returns metadata for ALL
+// released versions of a gem; long-lived gems (rails, nokogiri)
+// have hundreds of entries and the JSON can run to several MB.
+// 16 MiB is the deliberately generous ceiling.
+const maxResponseBytes = 16 << 20
+
 // ResolveVersion verifies that (packageID, version) exists on
 // rubygems.org by fetching the per-gem versions list and scanning
 // for the requested number. The list endpoint returns metadata for
@@ -46,7 +53,7 @@ func (rubygemsCommon) ResolveVersion(packageID, version string) (*ecosystems.Ver
 		return nil, fmt.Errorf("rubygems.org returned %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read rubygems.org response: %w", err)
 	}

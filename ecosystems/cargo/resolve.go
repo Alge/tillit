@@ -17,6 +17,12 @@ import (
 // same JSON shape under /api/v1/crates/<name>/<version>.
 const defaultCargoURL = "https://crates.io"
 
+// maxResponseBytes caps the per-version metadata read. crates.io's
+// /api/v1/crates/<name>/<version> response is a single release —
+// typically a few KB — so 1 MiB is a comfortable ceiling that
+// protects against a malicious or misbehaving mirror.
+const maxResponseBytes = 1 << 20
+
 // ResolveVersion verifies that (packageID, version) exists on
 // crates.io by fetching the per-version JSON and returns the canonical
 // sha256 checksum the response advertises. crates.io publishes one
@@ -47,7 +53,7 @@ func (cargoCommon) ResolveVersion(packageID, version string) (*ecosystems.Versio
 		return nil, fmt.Errorf("crates.io returned %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read crates.io response: %w", err)
 	}

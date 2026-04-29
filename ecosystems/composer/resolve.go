@@ -17,6 +17,12 @@ import (
 // that exposes the same JSON shape under /p2/<vendor>/<name>.json.
 const defaultPackagistURL = "https://repo.packagist.org"
 
+// maxResponseBytes caps the per-package metadata read. Packagist's
+// /p2/<vendor>/<name>.json returns metadata for ALL versions of a
+// package; popular libraries (symfony/console, guzzlehttp/guzzle)
+// can exceed 5 MB. 16 MiB is the deliberately generous ceiling.
+const maxResponseBytes = 16 << 20
+
 // ResolveVersion verifies that (packageID, version) exists on
 // Packagist by fetching the package metadata document and scanning
 // its versions list. The Packagist v2 API returns metadata for ALL
@@ -51,7 +57,7 @@ func (composerCommon) ResolveVersion(packageID, version string) (*ecosystems.Ver
 		return nil, fmt.Errorf("packagist returned %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read packagist response: %w", err)
 	}

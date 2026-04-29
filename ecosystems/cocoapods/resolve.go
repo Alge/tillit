@@ -16,6 +16,13 @@ import (
 // that exposes the same /api/v1/pods endpoints.
 const defaultTrunkURL = "https://trunk.cocoapods.org"
 
+// maxResponseBytes caps the response read. We only consult the
+// HTTP status to decide existence; the body (a podspec JSON) is
+// drained and discarded. 1 MiB is generous enough for any real
+// podspec while preventing a misbehaving mirror from streaming
+// indefinitely.
+const maxResponseBytes = 1 << 20
+
 // ResolveVersion verifies that (packageID, version) exists on Trunk
 // by fetching the podspec for that release. The endpoint returns
 // the .podspec JSON we don't otherwise need, so we only inspect the
@@ -63,7 +70,7 @@ func (cocoapodsCommon) ResolveVersion(packageID, version string) (*ecosystems.Ve
 
 	// Drain the body so the connection can be reused. We don't need
 	// the contents.
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseBytes))
 
 	return &ecosystems.VersionInfo{
 		PackageID: packageID,

@@ -16,6 +16,12 @@ import (
 // TILLIT_PUB_URL when targeting a private mirror.
 const defaultPubURL = "https://pub.dev"
 
+// maxResponseBytes caps the per-version metadata read. pub.dev's
+// /api/packages/<name>/versions/<ver> response is a single release —
+// typically a few KB — so 1 MiB is a comfortable ceiling that
+// protects against a malicious or misbehaving mirror.
+const maxResponseBytes = 1 << 20
+
 // ResolveVersion verifies that (packageID, version) exists on pub.dev
 // by fetching the per-version JSON record. Pub publishes one tarball
 // per release with `archive_sha256` set to its SHA-256 hash, so a
@@ -45,7 +51,7 @@ func (pubCommon) ResolveVersion(packageID, version string) (*ecosystems.VersionI
 		return nil, fmt.Errorf("pub.dev returned %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read pub.dev response: %w", err)
 	}

@@ -17,6 +17,13 @@ import (
 // exposes the same JSON shape.
 const defaultPyPIURL = "https://pypi.org"
 
+// maxResponseBytes caps the per-version metadata read. PyPI's
+// /pypi/<name>/<ver>/json response holds the artifact list for one
+// release — a handful of wheels plus an sdist, well under 100 KB —
+// so 1 MiB is a comfortable ceiling that protects against a
+// malicious or misbehaving mirror.
+const maxResponseBytes = 1 << 20
+
 // ResolveVersion verifies that (packageID, version) exists on PyPI
 // by fetching the project's JSON record and returns the canonical
 // sdist sha256 hash when one is published. A wheel hash is used as
@@ -49,7 +56,7 @@ func (pypiCommon) ResolveVersion(packageID, version string) (*ecosystems.Version
 		return nil, fmt.Errorf("pypi returned %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read pypi response: %w", err)
 	}

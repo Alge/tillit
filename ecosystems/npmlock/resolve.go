@@ -15,6 +15,12 @@ import (
 // defaultRegistry is queried when npm_config_registry isn't set.
 const defaultRegistry = "https://registry.npmjs.org"
 
+// maxResponseBytes caps the per-version metadata read. The npm
+// registry's /<name>/<ver> endpoint returns one release's JSON —
+// typically a few KB even for popular packages — so 1 MiB is a
+// comfortable ceiling that protects against a misbehaving mirror.
+const maxResponseBytes = 1 << 20
+
 // ResolveVersion confirms that (packageID, version) exists in the
 // configured npm registry and returns the canonical sha512
 // integrity hash from the registry's per-version metadata. The
@@ -53,7 +59,7 @@ func (npmCommon) ResolveVersion(packageID, version string) (*ecosystems.VersionI
 		return nil, fmt.Errorf("npm registry returned %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read registry response: %w", err)
 	}

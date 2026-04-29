@@ -16,6 +16,12 @@ import (
 // exposes the same paths.
 const defaultNugetURL = "https://api.nuget.org"
 
+// maxResponseBytes caps the response read. The flat container
+// returns the .nupkg.sha512 sibling — exactly the base64-encoded
+// SHA-512 plus an optional newline, well under 200 bytes — so 4 KiB
+// is plenty of headroom and a tight cap on a misbehaving mirror.
+const maxResponseBytes = 4 << 10
+
 // ResolveVersion verifies that (packageID, version) exists on
 // nuget.org by fetching the .nupkg.sha512 sibling file the flat
 // container publishes for every release. The endpoint is small
@@ -54,7 +60,7 @@ func (nugetCommon) ResolveVersion(packageID, version string) (*ecosystems.Versio
 		return nil, fmt.Errorf("nuget returned %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read nuget response: %w", err)
 	}
