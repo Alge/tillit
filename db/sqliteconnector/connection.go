@@ -67,13 +67,16 @@ func (c *SqliteConnector) queryConnections(where string, args ...any) ([]*models
 	return conns, nil
 }
 
+// CreateConnection inserts a connection. ON CONFLICT(id) the existing
+// row is left untouched — re-uploads (e.g. mirror push) are no-ops.
 func (c *SqliteConnector) CreateConnection(conn *models.Connection) error {
 	if conn.CreatedAt.IsZero() {
 		conn.CreatedAt = time.Now().UTC()
 	}
 	_, err := c.Database.Exec(
 		`INSERT INTO connections (`+connectionColumns+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
+		 ON CONFLICT(id) DO NOTHING`,
 		conn.ID, conn.Owner, conn.OtherID,
 		conn.Public, conn.Trust, conn.TrustExtends,
 		conn.Payload, conn.Algorithm, conn.Sig,

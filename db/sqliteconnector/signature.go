@@ -85,10 +85,15 @@ func (c *SqliteConnector) GetUserSignatures(signerID string, since *time.Time, i
 	return sigs, nil
 }
 
+// CreateSignature inserts a signature. ON CONFLICT(id) the existing
+// row is left untouched — re-uploading the same signature (e.g.
+// re-running 'tillit mirror push' or syncing the same row from
+// multiple devices) is a silent no-op rather than an error.
 func (c *SqliteConnector) CreateSignature(s *models.Signature) error {
 	_, err := c.Database.Exec(
 		`INSERT INTO signatures (id, signer, payload, algorithm, sig, uploaded_at, public)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO NOTHING`,
 		s.ID, s.Signer, s.Payload, s.Algorithm, s.Sig,
 		s.UploadedAt.UTC().Format(time.RFC3339), s.Public,
 	)
