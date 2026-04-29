@@ -18,7 +18,7 @@ type DatabaseConnector interface {
 
 	GetConnection(id string) (*models.Connection, error)
 	GetUserConnections(userID string) ([]*models.Connection, error)
-	GetUserPublicConnections(userID string, since *time.Time) ([]*models.Connection, error)
+	GetUserPublicConnections(userID string, since *time.Time, includePrivate bool) ([]*models.Connection, error)
 	CreateConnection(u *models.Connection) error
 	DeleteConnection(u *models.Connection) error
 	RevokeConnection(id string, at time.Time) error

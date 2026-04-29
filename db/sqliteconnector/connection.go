@@ -30,16 +30,23 @@ func (c *SqliteConnector) GetUserConnections(userID string) ([]*models.Connectio
 	return c.queryConnections(`WHERE owner = ?`, userID)
 }
 
-// GetUserPublicConnections returns connections owned by userID that are
-// public=1 and not revoked, optionally filtered to those created after `since`.
-func (c *SqliteConnector) GetUserPublicConnections(userID string, since *time.Time) ([]*models.Connection, error) {
-	if since != nil {
-		return c.queryConnections(
-			`WHERE owner = ? AND public = 1 AND revoked = 0 AND created_at > ? ORDER BY created_at ASC`,
-			userID, since.UTC().Format(time.RFC3339))
+// GetUserPublicConnections returns connections owned by userID. By
+// default only the public, non-revoked rows are returned (the public
+// peer-discovery view); when includePrivate is true the result also
+// includes private rows — only the authenticated owner should ask for
+// that. Revoked rows are always returned (they need to propagate to
+// peers' caches so they can mark theirs revoked too).
+func (c *SqliteConnector) GetUserPublicConnections(userID string, since *time.Time, includePrivate bool) ([]*models.Connection, error) {
+	where := `owner = ?`
+	args := []any{userID}
+	if !includePrivate {
+		where += ` AND public = 1 AND revoked = 0`
 	}
-	return c.queryConnections(
-		`WHERE owner = ? AND public = 1 AND revoked = 0 ORDER BY created_at ASC`, userID)
+	if since != nil {
+		where += ` AND created_at > ?`
+		args = append(args, since.UTC().Format(time.RFC3339))
+	}
+	return c.queryConnections(`WHERE `+where+` ORDER BY created_at ASC`, args...)
 }
 
 func (c *SqliteConnector) queryConnections(where string, args ...any) ([]*models.Connection, error) {

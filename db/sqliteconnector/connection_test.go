@@ -112,7 +112,7 @@ func TestGetUserPublicConnections_FiltersPrivateAndRevoked(t *testing.T) {
 		t.Fatalf("RevokeConnection failed: %v", err)
 	}
 
-	got, err := c.GetUserPublicConnections("alice", nil)
+	got, err := c.GetUserPublicConnections("alice", nil, false)
 	if err != nil {
 		t.Fatalf("GetUserPublicConnections failed: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestGetUserPublicConnections_SinceFilter(t *testing.T) {
 		t.Fatalf("CreateConnection failed: %v", err)
 	}
 
-	got, err := c.GetUserPublicConnections("alice", &t1)
+	got, err := c.GetUserPublicConnections("alice", &t1, false)
 	if err != nil {
 		t.Fatalf("GetUserPublicConnections failed: %v", err)
 	}

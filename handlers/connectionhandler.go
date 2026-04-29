@@ -10,6 +10,7 @@ import (
 	"github.com/Alge/tillit/db"
 	"github.com/Alge/tillit/db/dberrors"
 	"github.com/Alge/tillit/models"
+	"github.com/Alge/tillit/requestdata"
 )
 
 type connInput struct {
@@ -150,7 +151,13 @@ func GetUserConnectionsHandler(database db.DatabaseConnector) http.HandlerFunc {
 			since = &t
 		}
 
-		conns, err := database.GetUserPublicConnections(userID, since)
+		// Authenticated owners see their full set; everyone else only
+		// the public, non-revoked rows.
+		includePrivate := false
+		if u, ok := requestdata.GetUser(r); ok && u.ID == userID {
+			includePrivate = true
+		}
+		conns, err := database.GetUserPublicConnections(userID, since, includePrivate)
 		if err != nil {
 			log.Printf("GetUserPublicConnections failed: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
