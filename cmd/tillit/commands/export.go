@@ -1,13 +1,18 @@
 package commands
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
+	tillit_crypto "github.com/Alge/tillit/crypto"
 	"github.com/Alge/tillit/localstore"
+	"github.com/Alge/tillit/resolver"
 )
 
 // exportFormatVersion is bumped if the on-disk schema changes in a
@@ -35,29 +40,69 @@ type exportDoc struct {
 	PushState         []*localstore.PushStateRow     `json:"push_state,omitempty"`
 }
 
-// Export writes a snapshot of the local store to a file. By default
-// only the active user's own state is included (their keys, peers,
-// servers, signatures+connections they signed, and the push-state
-// tracking those uploads). The --all flag widens the scope to also
-// include every cached row originating from peers.
+// exportScope is how much cached-row data to include.
+type exportScope int
+
+const (
+	// scopeSelf is the default — only the chosen identity's own
+	// signatures and connections.
+	scopeSelf exportScope = iota
+	// scopeIncludePeers extends the export to every signer reachable
+	// from the chosen identity through the trust graph (direct peers
+	// plus transitive ones, bounded by their TrustDepth/TrustExtends).
+	scopeIncludePeers
+	// scopeAll dumps every row in the local store regardless of
+	// signer.
+	scopeAll
+)
+
+// Export writes a snapshot of the local store to a file.
+//
+// By default only the active user's own state is included (their key,
+// signatures + connections they signed, plus peers/servers/push-state
+// from this device). --include-peers extends the cached-row scope to
+// every signer in the chosen identity's trust graph (direct +
+// transitive). --all widens further to every row in the local store.
+// --key <name> selects a different identity to export instead of the
+// active one.
 //
 // The output contains private key material — handle accordingly.
 func Export(args []string) error {
-	includeAll := false
+	scope := scopeSelf
+	scopeFlagsSet := 0
+	keyName := ""
 	var positional []string
-	for _, a := range args {
-		switch a {
-		case "--all", "-a":
-			includeAll = true
-		case "--help", "-h":
-			fmt.Fprintln(os.Stderr, "usage: tillit export [--all] <file>")
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--all" || a == "-a":
+			scope = scopeAll
+			scopeFlagsSet++
+		case a == "--include-peers":
+			scope = scopeIncludePeers
+			scopeFlagsSet++
+		case a == "--help" || a == "-h":
+			fmt.Fprintln(os.Stderr, "usage: tillit export [--include-peers | --all] [--key <name>] <file>")
 			return nil
+		case a == "--key" || a == "-k":
+			if i+1 >= len(args) {
+				return fmt.Errorf("%s requires a value", a)
+			}
+			keyName = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--key="):
+			keyName = strings.TrimPrefix(a, "--key=")
+		case strings.HasPrefix(a, "-"):
+			return fmt.Errorf("unknown flag %q", a)
 		default:
 			positional = append(positional, a)
 		}
 	}
+	if scopeFlagsSet > 1 {
+		return fmt.Errorf("--include-peers and --all are mutually exclusive")
+	}
 	if len(positional) != 1 {
-		return fmt.Errorf("usage: tillit export [--all] <file>")
+		return fmt.Errorf("usage: tillit export [--include-peers | --all] [--key <name>] <file>")
 	}
 	path := positional[0]
 
@@ -67,7 +112,7 @@ func Export(args []string) error {
 	}
 	defer s.Close()
 
-	doc, err := buildExportDoc(s, includeAll)
+	doc, err := buildExportDoc(s, scope, keyName)
 	if err != nil {
 		return err
 	}
@@ -138,14 +183,23 @@ func Import(args []string) error {
 	return nil
 }
 
-// buildExportDoc gathers state into a snapshot. When includeAll is
-// false, cached signatures and connections are filtered to those
-// signed by the active user (everything you produced yourself), and
-// the cached_users pubkey cache (which is purely a verification cache
-// for other peers' keys) is omitted entirely. When includeAll is
-// true, every row from every table is included.
-func buildExportDoc(s *localstore.Store, includeAll bool) (*exportDoc, error) {
-	keys, err := s.ListKeys()
+// buildExportDoc gathers state into a snapshot.
+//
+// Scope:
+//   - scopeSelf: cached signatures/connections only for the chosen
+//     identity; cached_users excluded.
+//   - scopeIncludePeers: also includes rows by every signer reachable
+//     in the chosen identity's trust graph, plus the cached_users
+//     pubkey cache for those signers (so the recipient can verify
+//     signatures offline).
+//   - scopeAll: every row in every cache table, regardless of signer.
+//
+// Identity selection: keyName="" picks the active key (and includes
+// every stored key in the export). A specific keyName picks that one
+// key as the identity AND restricts the keys array to just that one
+// — the use case is "give a colleague this single identity."
+func buildExportDoc(s *localstore.Store, scope exportScope, keyName string) (*exportDoc, error) {
+	allKeys, err := s.ListKeys()
 	if err != nil {
 		return nil, fmt.Errorf("list keys: %w", err)
 	}
@@ -169,18 +223,43 @@ func buildExportDoc(s *localstore.Store, includeAll bool) (*exportDoc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list push state: %w", err)
 	}
-	active, _ := s.GetActiveKey()
+
+	exportKeys := allKeys
+	identityID := ""
+	activeName := ""
+	if keyName != "" {
+		k, err := s.GetKey(keyName)
+		if err != nil {
+			return nil, fmt.Errorf("--key %q: %w", keyName, err)
+		}
+		uid, err := userIDFromKey(k)
+		if err != nil {
+			return nil, err
+		}
+		identityID = uid
+		exportKeys = []*localstore.Key{k}
+		activeName = keyName
+	} else {
+		activeName, _ = s.GetActiveKey()
+		if activeName != "" {
+			if k, err := s.GetKey(activeName); err == nil {
+				identityID, _ = userIDFromKey(k)
+			}
+		}
+	}
 
 	doc := &exportDoc{
 		Version:    exportFormatVersion,
 		ExportedAt: time.Now().UTC().Format(time.RFC3339),
-		ActiveKey:  active,
-		Keys:       keys,
+		ActiveKey:  activeName,
+		Keys:       exportKeys,
 		Peers:      peers,
 		Servers:    servers,
 		PushState:  push,
 	}
-	if includeAll {
+
+	switch scope {
+	case scopeAll:
 		users, err := s.ListCachedUsers()
 		if err != nil {
 			return nil, fmt.Errorf("list cached users: %w", err)
@@ -189,26 +268,76 @@ func buildExportDoc(s *localstore.Store, includeAll bool) (*exportDoc, error) {
 		doc.CachedConnections = allConns
 		doc.CachedUsers = users
 		return doc, nil
-	}
 
-	// Default scope: only the active user's own rows.
-	_, userID, err := activeSignerAndID(s)
-	if err != nil {
-		// No active key — nothing user-owned to export beyond keys.
-		// Fall through with empty filtered slices.
+	case scopeIncludePeers:
+		if identityID == "" {
+			return doc, nil
+		}
+		// Walk the trust graph rooted at the chosen identity.
+		r := resolver.New(s, identityID)
+		entries, err := r.TrustSet(identityID)
+		if err != nil {
+			return nil, fmt.Errorf("walk trust set: %w", err)
+		}
+		signers := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			signers[e.SignerID] = true
+		}
+		for _, sig := range allSigs {
+			if signers[sig.Signer] {
+				doc.CachedSignatures = append(doc.CachedSignatures, sig)
+			}
+		}
+		for _, c := range allConns {
+			if signers[c.Signer] {
+				doc.CachedConnections = append(doc.CachedConnections, c)
+			}
+		}
+		// Pubkey cache for the trust set so the recipient can verify
+		// signatures offline.
+		users, err := s.ListCachedUsers()
+		if err != nil {
+			return nil, fmt.Errorf("list cached users: %w", err)
+		}
+		for _, u := range users {
+			if signers[u.ID] {
+				doc.CachedUsers = append(doc.CachedUsers, u)
+			}
+		}
+		return doc, nil
+
+	default: // scopeSelf
+		if identityID == "" {
+			return doc, nil
+		}
+		for _, sig := range allSigs {
+			if sig.Signer == identityID {
+				doc.CachedSignatures = append(doc.CachedSignatures, sig)
+			}
+		}
+		for _, c := range allConns {
+			if c.Signer == identityID {
+				doc.CachedConnections = append(doc.CachedConnections, c)
+			}
+		}
 		return doc, nil
 	}
-	for _, sig := range allSigs {
-		if sig.Signer == userID {
-			doc.CachedSignatures = append(doc.CachedSignatures, sig)
-		}
+}
+
+// userIDFromKey derives a user id from a stored key the same way
+// activeSignerAndID does — sha256 of the pubkey bytes, base64url
+// encoded — but without requiring the key to be the active one.
+func userIDFromKey(k *localstore.Key) (string, error) {
+	privBytes, err := base64.RawURLEncoding.DecodeString(k.PrivKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid stored private key %q: %w", k.Name, err)
 	}
-	for _, c := range allConns {
-		if c.Signer == userID {
-			doc.CachedConnections = append(doc.CachedConnections, c)
-		}
+	signer, err := tillit_crypto.LoadSigner(k.Algorithm, privBytes)
+	if err != nil {
+		return "", fmt.Errorf("load signer for %q: %w", k.Name, err)
 	}
-	return doc, nil
+	hash := sha256.Sum256(signer.PublicKey())
+	return base64.RawURLEncoding.EncodeToString(hash[:]), nil
 }
 
 func writeExport(w io.Writer, doc *exportDoc) error {
