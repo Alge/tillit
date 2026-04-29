@@ -87,6 +87,28 @@ type Adapter interface {
 	// CLI rather than ending up in the trust store. Returns nil if the
 	// version is valid; otherwise an error describing the problem.
 	ValidateVersion(v string) error
+
+	// ResolveVersion contacts the ecosystem's authoritative source
+	// to confirm that the (packageID, version) tuple actually exists,
+	// and returns the canonical artifact hash when one is available.
+	// Sign commands call it before recording a decision so a typo or
+	// hallucinated version can't end up in the trust store. Returns
+	// an error when the ecosystem is unreachable, the version isn't
+	// known, or the package doesn't exist.
+	ResolveVersion(packageID, version string) (*VersionInfo, error)
+}
+
+// VersionInfo describes a (package, version) tuple as the ecosystem
+// itself reports it. Hash is the canonical artifact hash when the
+// ecosystem exposes one (Go: sumdb-validated h1: prefix; npm:
+// integrity sha512; PyPI: sha256). HashAlgo names the format ("h1",
+// "sha256", etc.) so callers can compare against lockfile-recorded
+// hashes without confusing schemes.
+type VersionInfo struct {
+	PackageID string
+	Version   string
+	Hash      string
+	HashAlgo  string
 }
 
 // GraphResolver is an optional adapter capability: it returns the full

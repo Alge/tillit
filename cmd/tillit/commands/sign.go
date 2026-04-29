@@ -30,14 +30,14 @@ func Sign(args []string) error {
 
 // signVersion creates a vetting decision for an exact version.
 //
-// usage: tillit sign version <ecosystem> <package> <version> --level <l> [--reason "..."]
+// usage: tillit sign version <ecosystem> <package> <version> --level <l> [--reason "..."] [--skip-verify]
 func signVersion(args []string) error {
 	if len(args) < 3 {
-		return fmt.Errorf("usage: tillit sign version <ecosystem> <package> <version> --level <allowed|vetted|rejected> [--reason \"...\"]")
+		return fmt.Errorf("usage: tillit sign version <ecosystem> <package> <version> --level <allowed|vetted|rejected> [--reason \"...\"] [--skip-verify]")
 	}
 	ecosystem, packageID, version := args[0], args[1], args[2]
 
-	level, reason, err := parseLevelReason(args[3:])
+	level, reason, skipVerify, err := parseSignFlags(args[3:])
 	if err != nil {
 		return err
 	}
@@ -45,6 +45,12 @@ func signVersion(args []string) error {
 	if a, ok := adapterForEcosystem(ecosystem); ok {
 		if err := a.ValidateVersion(version); err != nil {
 			return fmt.Errorf("invalid version: %w", err)
+		}
+		if !skipVerify {
+			if _, err := a.ResolveVersion(packageID, version); err != nil {
+				return fmt.Errorf("could not verify %s/%s@%s exists in the ecosystem: %w\n  (re-run with --skip-verify to sign without contacting the ecosystem)",
+					ecosystem, packageID, version, err)
+			}
 		}
 	}
 
@@ -79,14 +85,14 @@ func signVersion(args []string) error {
 // signDelta creates a delta decision attesting to review of the changes
 // between two versions.
 //
-// usage: tillit sign delta <ecosystem> <package> <from> <to> --level <l> [--reason "..."]
+// usage: tillit sign delta <ecosystem> <package> <from> <to> --level <l> [--reason "..."] [--skip-verify]
 func signDelta(args []string) error {
 	if len(args) < 4 {
-		return fmt.Errorf("usage: tillit sign delta <ecosystem> <package> <from-version> <to-version> --level <allowed|vetted|rejected> [--reason \"...\"]")
+		return fmt.Errorf("usage: tillit sign delta <ecosystem> <package> <from-version> <to-version> --level <allowed|vetted|rejected> [--reason \"...\"] [--skip-verify]")
 	}
 	ecosystem, packageID, from, to := args[0], args[1], args[2], args[3]
 
-	level, reason, err := parseLevelReason(args[4:])
+	level, reason, skipVerify, err := parseSignFlags(args[4:])
 	if err != nil {
 		return err
 	}
@@ -101,6 +107,16 @@ func signDelta(args []string) error {
 		if a.CompareVersions(from, to) >= 0 {
 			return fmt.Errorf("from version %s must precede to version %s in %s ordering",
 				from, to, ecosystem)
+		}
+		if !skipVerify {
+			if _, err := a.ResolveVersion(packageID, from); err != nil {
+				return fmt.Errorf("could not verify %s/%s@%s exists: %w\n  (re-run with --skip-verify to sign without contacting the ecosystem)",
+					ecosystem, packageID, from, err)
+			}
+			if _, err := a.ResolveVersion(packageID, to); err != nil {
+				return fmt.Errorf("could not verify %s/%s@%s exists: %w\n  (re-run with --skip-verify to sign without contacting the ecosystem)",
+					ecosystem, packageID, to, err)
+			}
 		}
 	}
 
@@ -133,33 +149,39 @@ func signDelta(args []string) error {
 	return nil
 }
 
-// parseLevelReason extracts --level (required) and --reason (optional)
-// from the trailing args of a sign subcommand.
-func parseLevelReason(args []string) (models.DecisionLevel, string, error) {
+// parseSignFlags extracts the trailing flags shared by sign version
+// and sign delta: --level (required), --reason (optional), and
+// --skip-verify (optional, allows signing without contacting the
+// ecosystem — useful when offline or when adopting a new ecosystem
+// adapter that doesn't yet have a working ResolveVersion).
+func parseSignFlags(args []string) (models.DecisionLevel, string, bool, error) {
 	level := ""
 	reason := ""
+	skipVerify := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--level":
 			if i+1 >= len(args) {
-				return "", "", fmt.Errorf("--level requires a value")
+				return "", "", false, fmt.Errorf("--level requires a value")
 			}
 			i++
 			level = args[i]
 		case "--reason":
 			if i+1 >= len(args) {
-				return "", "", fmt.Errorf("--reason requires a value")
+				return "", "", false, fmt.Errorf("--reason requires a value")
 			}
 			i++
 			reason = args[i]
+		case "--skip-verify":
+			skipVerify = true
 		default:
-			return "", "", fmt.Errorf("unknown flag: %s", args[i])
+			return "", "", false, fmt.Errorf("unknown flag: %s", args[i])
 		}
 	}
 	if level == "" {
-		return "", "", fmt.Errorf("--level is required (allowed, vetted, or rejected)")
+		return "", "", false, fmt.Errorf("--level is required (allowed, vetted, or rejected)")
 	}
-	return models.DecisionLevel(level), reason, nil
+	return models.DecisionLevel(level), reason, skipVerify, nil
 }
 
 // signAndCache signs payload and writes the resulting CachedSignature.
