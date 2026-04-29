@@ -173,21 +173,33 @@ type outgoingConn struct {
 	TrustExtends int
 }
 
-// signerOutgoing returns the active (non-revoked, trust=true,
-// type=connection) outgoing edges declared by signer.
+// signerOutgoing returns the active (trust=true, not revoked,
+// type=connection) outgoing edges declared by signer. Revocation is
+// derived from connection_revocation rows in the same signer's set
+// — the cache row's mutable revoked column is ignored.
 func (r *Resolver) signerOutgoing(signer string) ([]outgoingConn, error) {
 	rows, err := r.store.GetCachedConnectionsBySigner(signer)
 	if err != nil {
 		return nil, fmt.Errorf("get connections for %s: %w", signer, err)
 	}
+	revokedTargets := map[string]bool{}
+	for _, row := range rows {
+		var p models.Payload
+		if err := json.Unmarshal([]byte(row.Payload), &p); err != nil {
+			continue
+		}
+		if p.Type == models.PayloadTypeConnectionRevocation {
+			revokedTargets[p.TargetID] = true
+		}
+	}
 	var out []outgoingConn
 	for _, row := range rows {
-		if row.Revoked {
+		if revokedTargets[row.ID] {
 			continue
 		}
 		var p models.Payload
 		if err := json.Unmarshal([]byte(row.Payload), &p); err != nil {
-			continue // skip malformed rows silently — sync should reject them
+			continue
 		}
 		if p.Type != models.PayloadTypeConnection || !p.Trust {
 			continue

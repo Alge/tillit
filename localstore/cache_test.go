@@ -149,23 +149,100 @@ func TestDeleteCachedSignature_Missing(t *testing.T) {
 	}
 }
 
-func TestSaveCachedSignature_Upsert(t *testing.T) {
+// TestSaveCachedSignature_RowIsWriteOnce locks in that subsequent
+// saves of the same id are silent no-ops — the cache stores
+// immutable signed artifacts, so the first write of a row wins. (The
+// id is a content hash, so any second write with the same id by
+// definition has the same payload+sig anyway.)
+func TestSaveCachedSignature_RowIsWriteOnce(t *testing.T) {
 	s := newTestStore(t)
-
 	now := time.Now().UTC().Truncate(time.Second)
-	sig := &localstore.CachedSignature{
-		ID: "sig-1", Signer: "user-a", Payload: "original",
-		Algorithm: "ed25519", Sig: "x", UploadedAt: now, FetchedAt: now,
-	}
-	s.SaveCachedSignature(sig)
 
-	sig.Payload = "updated"
-	if err := s.SaveCachedSignature(sig); err != nil {
-		t.Fatalf("upsert failed: %v", err)
-	}
+	s.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "sig-1", Signer: "alice", Payload: "original",
+		Algorithm: "ed25519", Sig: "x",
+		UploadedAt: now, FetchedAt: now,
+	})
+	// Try to clobber with arbitrary changes — should be ignored.
+	s.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "sig-1", Signer: "mallory", Payload: "tampered",
+		Algorithm: "ed25519", Sig: "y",
+		UploadedAt: now.Add(time.Hour), FetchedAt: now.Add(time.Hour),
+	})
 
-	got, _ := s.GetCachedSignature("sig-1")
-	if got.Payload != "updated" {
-		t.Errorf("expected updated payload, got %q", got.Payload)
+	got, err := s.GetCachedSignature("sig-1")
+	if err != nil {
+		t.Fatalf("GetCachedSignature: %v", err)
+	}
+	if got.Payload != "original" || got.Signer != "alice" || got.Sig != "x" {
+		t.Errorf("immutability violated, got: %+v", got)
 	}
 }
+
+// TestIsCachedSignatureRevoked: revocation status is purely derived
+// from the existence of a revocation signature targeting the row,
+// signed by the same signer (the only one allowed to revoke).
+func TestIsCachedSignatureRevoked(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	s.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "target", Signer: "alice",
+		Payload:    `{"type":"decision","signer":"alice","ecosystem":"go","package_id":"p","version":"v1","level":"vetted"}`,
+		Algorithm:  "ed25519", Sig: "x",
+		UploadedAt: now, FetchedAt: now,
+	})
+
+	revoked, _, err := s.IsCachedSignatureRevoked("target")
+	if err != nil {
+		t.Fatalf("IsCachedSignatureRevoked: %v", err)
+	}
+	if revoked {
+		t.Error("expected not-revoked before any revocation sig is recorded")
+	}
+
+	revAt := now.Add(time.Hour)
+	s.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "rev-1", Signer: "alice",
+		Payload:    `{"type":"revocation","signer":"alice","target_id":"target"}`,
+		Algorithm:  "ed25519", Sig: "y",
+		UploadedAt: revAt, FetchedAt: revAt,
+	})
+
+	revoked, when, err := s.IsCachedSignatureRevoked("target")
+	if err != nil {
+		t.Fatalf("IsCachedSignatureRevoked: %v", err)
+	}
+	if !revoked {
+		t.Error("expected revoked after revocation sig recorded")
+	}
+	if when == nil || !when.Equal(revAt) {
+		t.Errorf("expected revoked_at = %v (revocation upload time), got %v", revAt, when)
+	}
+}
+
+// A revocation by a DIFFERENT signer must NOT cause the target to be
+// considered revoked — server enforces that only the signer can
+// revoke their own row, and the derived view honours the same rule.
+func TestIsCachedSignatureRevoked_RejectsForeignRevocation(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	s.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "target", Signer: "alice",
+		Payload: `{"type":"decision","signer":"alice","ecosystem":"go","package_id":"p","version":"v1","level":"vetted"}`,
+		Algorithm: "ed25519", Sig: "x", UploadedAt: now, FetchedAt: now,
+	})
+	// Bob tries to revoke Alice's signature.
+	s.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "rev-bob", Signer: "bob",
+		Payload: `{"type":"revocation","signer":"bob","target_id":"target"}`,
+		Algorithm: "ed25519", Sig: "z", UploadedAt: now, FetchedAt: now,
+	})
+	revoked, _, _ := s.IsCachedSignatureRevoked("target")
+	if revoked {
+		t.Error("a foreign signer's revocation must not flip the target — only the signer can revoke their own")
+	}
+}
+
+// (removed: TestSaveCachedSignature_Upsert tested upsert semantics that
+// no longer apply — see TestSaveCachedSignature_RowIsWriteOnce.)

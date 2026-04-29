@@ -87,7 +87,8 @@ func TestGetActiveConnection(t *testing.T) {
 
 	// Insert one — it should now be the active.
 	c1 := &localstore.CachedConnection{
-		ID: "c-1", Signer: "alice", OtherID: "bob", Payload: "{}",
+		ID: "c-1", Signer: "alice", OtherID: "bob",
+		Payload:   `{"type":"connection","signer":"alice","other_id":"bob","trust":true}`,
 		Algorithm: "ed25519", Sig: "x",
 		CreatedAt: now, FetchedAt: now,
 	}
@@ -99,12 +100,15 @@ func TestGetActiveConnection(t *testing.T) {
 		t.Fatalf("expected c-1, got %v err=%v", got, err)
 	}
 
-	// A revoked one shouldn't be returned even if it's the only one.
-	revokedAt := now.Add(time.Minute)
-	c1.Revoked = true
-	c1.RevokedAt = &revokedAt
-	if err := s.SaveCachedConnection(c1); err != nil {
-		t.Fatalf("re-save failed: %v", err)
+	// A revocation sig targeting c-1 should make it inactive — derived,
+	// no column flip.
+	if err := s.SaveCachedConnection(&localstore.CachedConnection{
+		ID: "c-rev", Signer: "alice", OtherID: "bob",
+		Payload:   `{"type":"connection_revocation","signer":"alice","target_id":"c-1"}`,
+		Algorithm: "ed25519", Sig: "y",
+		CreatedAt: now.Add(time.Minute), FetchedAt: now,
+	}); err != nil {
+		t.Fatalf("save revocation: %v", err)
 	}
 	got, err = s.GetActiveConnection("alice", "bob")
 	if err != nil {
@@ -116,7 +120,8 @@ func TestGetActiveConnection(t *testing.T) {
 
 	// A new active one should be returned.
 	c2 := &localstore.CachedConnection{
-		ID: "c-2", Signer: "alice", OtherID: "bob", Payload: "{}",
+		ID: "c-2", Signer: "alice", OtherID: "bob",
+		Payload:   `{"type":"connection","signer":"alice","other_id":"bob","trust":true}`,
 		Algorithm: "ed25519", Sig: "x",
 		CreatedAt: now.Add(2 * time.Minute), FetchedAt: now,
 	}
@@ -129,28 +134,6 @@ func TestGetActiveConnection(t *testing.T) {
 	}
 }
 
-func TestSaveCachedConnection_Upsert(t *testing.T) {
-	s := newTestStore(t)
-
-	now := time.Now().UTC().Truncate(time.Second)
-	c := &localstore.CachedConnection{
-		ID: "c-1", Signer: "alice", Payload: "original",
-		Algorithm: "ed25519", Sig: "x", CreatedAt: now, FetchedAt: now,
-	}
-	s.SaveCachedConnection(c)
-
-	revokedAt := now.Add(time.Minute)
-	c.Revoked = true
-	c.RevokedAt = &revokedAt
-	if err := s.SaveCachedConnection(c); err != nil {
-		t.Fatalf("upsert failed: %v", err)
-	}
-
-	got, _ := s.GetCachedConnection("c-1")
-	if !got.Revoked {
-		t.Error("expected Revoked=true after upsert")
-	}
-	if got.RevokedAt == nil || !got.RevokedAt.Equal(revokedAt) {
-		t.Errorf("RevokedAt = %v, want %v", got.RevokedAt, revokedAt)
-	}
-}
+// (removed: TestSaveCachedConnection_Upsert exercised the old upsert
+// semantics. Revocation is now expressed via a separate
+// connection_revocation row; cached_connections rows are write-once.)

@@ -43,17 +43,36 @@ func addDecision(t *testing.T, s *localstore.Store, signer, ecosystem, pkg, vers
 	return id
 }
 
+// revokeSignature stores a revocation signature targeting id, signed
+// by the same signer who originally signed it. Revocation status is
+// derived from this row's existence — the cache no longer trusts a
+// mutable revoked flag.
 func revokeSignature(t *testing.T, s *localstore.Store, id string) {
 	t.Helper()
-	c, err := s.GetCachedSignature(id)
+	target, err := s.GetCachedSignature(id)
 	if err != nil {
 		t.Fatalf("GetCachedSignature: %v", err)
 	}
 	now := time.Now().UTC()
-	c.Revoked = true
-	c.RevokedAt = &now
-	if err := s.SaveCachedSignature(c); err != nil {
-		t.Fatalf("re-save revoked: %v", err)
+	revPayload := &models.Payload{
+		Type:     models.PayloadTypeRevocation,
+		Signer:   target.Signer,
+		TargetID: id,
+	}
+	bytes, err := json.Marshal(revPayload)
+	if err != nil {
+		t.Fatalf("marshal revocation: %v", err)
+	}
+	if err := s.SaveCachedSignature(&localstore.CachedSignature{
+		ID:         uuid.NewString(),
+		Signer:     target.Signer,
+		Payload:    string(bytes),
+		Algorithm:  "ed25519",
+		Sig:        "fake",
+		UploadedAt: now,
+		FetchedAt:  now,
+	}); err != nil {
+		t.Fatalf("save revocation: %v", err)
 	}
 }
 
