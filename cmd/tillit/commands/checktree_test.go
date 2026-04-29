@@ -36,9 +36,9 @@ func TestRenderTree_NestsTransitivesUnderDirect(t *testing.T) {
 	renderTree(&buf, rows, edges)
 	out := buf.String()
 
-	// Direct dep at column 0 with the * marker.
-	if !strings.Contains(out, "github.com/cloudflare/circl v1.6.3 [unknown] *") {
-		t.Errorf("expected direct root with marker, got:\n%s", out)
+	// Direct dep at column 0 — no trailing marker, position conveys it.
+	if !strings.Contains(out, "github.com/cloudflare/circl v1.6.3 [unknown]\n") {
+		t.Errorf("expected direct root rendered without marker, got:\n%s", out)
 	}
 	// Transitive nested under direct.
 	if !strings.Contains(out, "├── github.com/cespare/xxhash/v2 v2.3.0 [unknown]") {
@@ -52,31 +52,39 @@ func TestRenderTree_NestsTransitivesUnderDirect(t *testing.T) {
 	if !strings.Contains(out, "└── golang.org/x/crypto v0.30.0 [vetted]") {
 		t.Errorf("expected last-child └── on crypto, got:\n%s", out)
 	}
-	// Footer.
-	if !strings.Contains(out, "* = direct dependency") {
-		t.Errorf("expected legend footer, got:\n%s", out)
+	// No legend / direct-marker — keep output clean.
+	if strings.Contains(out, "(*)") || strings.Contains(out, "* = direct") {
+		t.Errorf("expected no markers in clean output, got:\n%s", out)
 	}
 }
 
-func TestRenderTree_DiamondShownOnceWithStarMarker(t *testing.T) {
-	// A and B are both direct; both depend on C. C should appear in
-	// full under one of them and as `(*)` under the other.
+func TestRenderTree_DiamondShownInFullUnderEachParent(t *testing.T) {
+	// A and B both depend on C. We now expand fully: C appears under
+	// both, and C's own subtree (here: D) is shown both times too.
 	rows := []row{
 		mkRow("a", "v1", true, resolver.StatusUnknown),
 		mkRow("b", "v1", true, resolver.StatusUnknown),
 		mkRow("c", "v1", false, resolver.StatusVetted),
+		mkRow("d", "v1", false, resolver.StatusVetted),
 	}
 	edges := map[string][]string{
 		"a@v1": {"c@v1"},
 		"b@v1": {"c@v1"},
+		"c@v1": {"d@v1"},
 	}
 
 	var buf bytes.Buffer
 	renderTree(&buf, rows, edges)
 	out := buf.String()
 
-	if strings.Count(out, "(*)") != 1 {
-		t.Errorf("expected one (*) dedupe marker, got:\n%s", out)
+	if got := strings.Count(out, "c v1 [vetted]"); got != 2 {
+		t.Errorf("expected c shown twice (once under each parent), got %d:\n%s", got, out)
+	}
+	if got := strings.Count(out, "d v1 [vetted]"); got != 2 {
+		t.Errorf("expected d expanded under c both times, got %d:\n%s", got, out)
+	}
+	if strings.Contains(out, "(*)") {
+		t.Errorf("dedupe marker should not appear, got:\n%s", out)
 	}
 }
 
@@ -102,7 +110,8 @@ func TestRenderTree_OrphansListedAtBottom(t *testing.T) {
 }
 
 func TestRenderTree_HandlesCycle(t *testing.T) {
-	// Defensive: cycle a→b→a should not infinite-loop.
+	// Defensive: cycle a→b→a should not infinite-loop. Each side gets
+	// printed once at the top of the cycle and recursion stops.
 	rows := []row{
 		mkRow("a", "v1", true, resolver.StatusUnknown),
 		mkRow("b", "v1", false, resolver.StatusUnknown),
@@ -123,7 +132,8 @@ func TestRenderTree_HandlesCycle(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("renderTree appears to be in an infinite loop")
 	}
-	if !strings.Contains(buf.String(), "(*)") {
-		t.Errorf("expected cycle-break (*) marker, got:\n%s", buf.String())
+	out := buf.String()
+	if !strings.Contains(out, "a v1 [unknown]") || !strings.Contains(out, "└── b v1 [unknown]") {
+		t.Errorf("expected cycle to render once before stopping, got:\n%s", out)
 	}
 }
