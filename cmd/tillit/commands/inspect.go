@@ -3,8 +3,11 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
+	"github.com/Alge/tillit/localstore"
 	"github.com/Alge/tillit/models"
 )
 
@@ -13,48 +16,90 @@ import (
 // `#` so the user can paste an ID straight from `query` output.
 func Inspect(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: tillit inspect <signature_id>")
+		return fmt.Errorf("usage: tillit inspect <signature_id>\n" +
+			"  (the leading '#' shown in 'query' output is optional; if you keep it,\n" +
+			"   quote the id — most shells treat '#' as a comment marker)")
 	}
-	q := strings.TrimPrefix(args[0], "#")
-	if q == "" {
-		return fmt.Errorf("signature id is empty")
-	}
-
 	s, err := openStore()
 	if err != nil {
 		return err
 	}
 	defer s.Close()
+	return runInspect(s, os.Stdout, args[0])
+}
+
+func runInspect(s *localstore.Store, w io.Writer, id string) error {
+	q := strings.TrimPrefix(id, "#")
+	if q == "" {
+		return fmt.Errorf("signature id is empty")
+	}
 
 	sig, err := s.LookupCachedSignature(q)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("ID:          %s\n", sig.ID)
-	fmt.Printf("Signer:      %s\n", sig.Signer)
-	fmt.Printf("Algorithm:   %s\n", sig.Algorithm)
-	fmt.Printf("Uploaded at: %s\n", sig.UploadedAt.Format("2006-01-02 15:04:05 MST"))
-	fmt.Printf("Fetched at:  %s\n", sig.FetchedAt.Format("2006-01-02 15:04:05 MST"))
+	fmt.Fprintf(w, "ID:          %s\n", sig.ID)
+	fmt.Fprintf(w, "Signer:      %s\n", sig.Signer)
+	fmt.Fprintf(w, "Algorithm:   %s\n", sig.Algorithm)
+	fmt.Fprintf(w, "Uploaded at: %s\n", sig.UploadedAt.Format("2006-01-02 15:04:05 MST"))
+	fmt.Fprintf(w, "Fetched at:  %s\n", sig.FetchedAt.Format("2006-01-02 15:04:05 MST"))
 	if sig.Revoked {
 		when := ""
 		if sig.RevokedAt != nil {
 			when = " at " + sig.RevokedAt.Format("2006-01-02 15:04:05 MST")
 		}
-		fmt.Printf("Revoked:     yes%s\n", when)
+		fmt.Fprintf(w, "Revoked:     yes%s\n", when)
+		if rev, err := findRevocationFor(s, sig); err == nil && rev != nil {
+			fmt.Fprintln(w, "Revocation:")
+			fmt.Fprintf(w, "  ID:          %s\n", rev.ID)
+			fmt.Fprintf(w, "  Uploaded at: %s\n", rev.UploadedAt.Format("2006-01-02 15:04:05 MST"))
+			fmt.Fprintln(w, "  Payload:")
+			if pretty, err := prettyJSON(rev.Payload); err == nil {
+				fmt.Fprintln(w, indent(pretty, "    "))
+			} else {
+				fmt.Fprintln(w, indent(rev.Payload, "    "))
+			}
+			fmt.Fprintf(w, "  Sig:         %s\n", rev.Sig)
+		}
 	} else {
-		fmt.Println("Revoked:     no")
+		fmt.Fprintln(w, "Revoked:     no")
 	}
 
-	fmt.Println("Payload:")
+	fmt.Fprintln(w, "Payload:")
 	if pretty, err := prettyJSON(sig.Payload); err == nil {
-		fmt.Println(indent(pretty, "  "))
+		fmt.Fprintln(w, indent(pretty, "  "))
 	} else {
-		fmt.Println(indent(sig.Payload, "  "))
+		fmt.Fprintln(w, indent(sig.Payload, "  "))
 	}
 
-	fmt.Printf("Sig:         %s\n", sig.Sig)
+	fmt.Fprintf(w, "Sig:         %s\n", sig.Sig)
 	return nil
+}
+
+// findRevocationFor looks for the revocation signature that targets the
+// given signature. Only the original signer can revoke their own
+// signatures (enforced server-side), so we only have to scan that
+// signer's cached signatures. Returns (nil, nil) when no revocation is
+// cached.
+func findRevocationFor(s *localstore.Store, target *localstore.CachedSignature) (*localstore.CachedSignature, error) {
+	sigs, err := s.GetCachedSignaturesBySigner(target.Signer)
+	if err != nil {
+		return nil, err
+	}
+	for _, candidate := range sigs {
+		if candidate.ID == target.ID {
+			continue
+		}
+		var p models.Payload
+		if err := json.Unmarshal([]byte(candidate.Payload), &p); err != nil {
+			continue
+		}
+		if p.Type == models.PayloadTypeRevocation && p.TargetID == target.ID {
+			return candidate, nil
+		}
+	}
+	return nil, nil
 }
 
 func prettyJSON(s string) (string, error) {
