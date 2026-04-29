@@ -9,6 +9,7 @@ import (
 
 	"github.com/Alge/tillit/ecosystems"
 	"github.com/Alge/tillit/ecosystems/cargo"
+	"github.com/Alge/tillit/ecosystems/cocoapods"
 	"github.com/Alge/tillit/ecosystems/composer"
 	"github.com/Alge/tillit/ecosystems/gosum"
 	"github.com/Alge/tillit/ecosystems/hexpm"
@@ -38,6 +39,7 @@ var adapters = []ecosystems.Adapter{
 	pub.PubspecLock{},
 	rubygems.GemfileLock{},
 	swiftpm.PackageResolved{},
+	cocoapods.PodfileLock{},
 }
 
 func Check(args []string) error {
