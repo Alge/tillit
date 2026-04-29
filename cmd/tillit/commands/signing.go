@@ -7,12 +7,11 @@ import (
 
 	tillit_crypto "github.com/Alge/tillit/crypto"
 	"github.com/Alge/tillit/models"
-	"github.com/google/uuid"
 )
 
 // signedItem is the result of signing a payload: the marshalled payload,
-// algorithm, base64url signature, and a freshly-minted UUID. Used to populate
-// localstore cache rows.
+// algorithm, base64url signature, and the content-addressed signature ID.
+// Used to populate localstore cache rows.
 type signedItem struct {
 	ID        string
 	Payload   string
@@ -32,10 +31,12 @@ func signPayload(signer tillit_crypto.Signer, p *models.Payload) (*signedItem, e
 	if err != nil {
 		return nil, fmt.Errorf("signing failed: %w", err)
 	}
+	payload := string(payloadBytes)
+	sig := base64.RawURLEncoding.EncodeToString(sigBytes)
 	return &signedItem{
-		ID:        uuid.NewString(),
-		Payload:   string(payloadBytes),
+		ID:        models.SignatureID(payload, sig),
+		Payload:   payload,
 		Algorithm: signer.Algorithm(),
-		Sig:       base64.RawURLEncoding.EncodeToString(sigBytes),
+		Sig:       sig,
 	}, nil
 }
