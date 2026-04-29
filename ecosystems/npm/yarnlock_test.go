@@ -1,11 +1,11 @@
-package npmlock_test
+package npm_test
 
 import (
 	"strings"
 	"testing"
 	"testing/fstest"
 
-	"github.com/Alge/tillit/ecosystems/npmlock"
+	"github.com/Alge/tillit/ecosystems/npm"
 )
 
 type yarnPackage struct {
@@ -17,7 +17,7 @@ func parseYarn(t *testing.T, content string) (pkgs []yarnPackage, warnings []str
 	fsys := fstest.MapFS{
 		"yarn.lock": &fstest.MapFile{Data: []byte(content)},
 	}
-	res, err := (npmlock.YarnLock{}).Parse(fsys, "yarn.lock")
+	res, err := (npm.YarnLock{}).Parse(fsys, "yarn.lock")
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
@@ -31,7 +31,7 @@ func parseYarn(t *testing.T, content string) (pkgs []yarnPackage, warnings []str
 }
 
 func TestYarnLock_Identity(t *testing.T) {
-	a := npmlock.YarnLock{}
+	a := npm.YarnLock{}
 	if a.Ecosystem() != "npm" {
 		t.Errorf("Ecosystem() = %q, want npm", a.Ecosystem())
 	}
@@ -177,7 +177,7 @@ func TestYarnLock_Parse_WarnsOnGitProtocol(t *testing.T) {
 }
 
 func TestYarnLock_Parse_MissingFileErrors(t *testing.T) {
-	_, err := (npmlock.YarnLock{}).Parse(fstest.MapFS{}, "yarn.lock")
+	_, err := (npm.YarnLock{}).Parse(fstest.MapFS{}, "yarn.lock")
 	if err == nil {
 		t.Error("expected error when file missing")
 	}

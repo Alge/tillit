@@ -1,4 +1,4 @@
-package npmlock
+package npm
 
 import (
 	"net/http"
@@ -31,7 +31,7 @@ func TestResolveVersion_Found(t *testing.T) {
 	defer srv.Close()
 	defer setEnv(t, "npm_config_registry", srv.URL)()
 
-	info, err := (NpmLock{}).ResolveVersion("lodash", "4.17.21")
+	info, err := (PackageLock{}).ResolveVersion("lodash", "4.17.21")
 	if err != nil {
 		t.Fatalf("ResolveVersion: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestResolveVersion_NotFound(t *testing.T) {
 	defer srv.Close()
 	defer setEnv(t, "npm_config_registry", srv.URL)()
 
-	_, err := (NpmLock{}).ResolveVersion("lodash", "9.9.9")
+	_, err := (PackageLock{}).ResolveVersion("lodash", "9.9.9")
 	if err == nil {
 		t.Fatal("expected error on 404")
 	}
@@ -67,7 +67,7 @@ func TestResolveVersion_FallsBackToShasumWhenNoIntegrity(t *testing.T) {
 	defer srv.Close()
 	defer setEnv(t, "npm_config_registry", srv.URL)()
 
-	info, err := (NpmLock{}).ResolveVersion("old-pkg", "1.0.0")
+	info, err := (PackageLock{}).ResolveVersion("old-pkg", "1.0.0")
 	if err != nil {
 		t.Fatalf("ResolveVersion: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestResolveVersion_ScopedPackagePathSurvivesURL(t *testing.T) {
 	defer srv.Close()
 	defer setEnv(t, "npm_config_registry", srv.URL)()
 
-	if _, err := (NpmLock{}).ResolveVersion("@types/node", "20.0.0"); err != nil {
+	if _, err := (PackageLock{}).ResolveVersion("@types/node", "20.0.0"); err != nil {
 		t.Fatalf("ResolveVersion: %v", err)
 	}
 	if !strings.HasPrefix(seen, "/@types/node/20.0.0") {

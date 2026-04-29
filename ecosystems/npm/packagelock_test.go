@@ -1,4 +1,4 @@
-package npmlock
+package npm
 
 import (
 	"sort"
@@ -49,7 +49,7 @@ func TestParse_LockfileVersion3(t *testing.T) {
 	fsys := fstest.MapFS{
 		"package-lock.json": &fstest.MapFile{Data: []byte(samplePackageLockV3)},
 	}
-	res, err := (NpmLock{}).Parse(fsys, "package-lock.json")
+	res, err := (PackageLock{}).Parse(fsys, "package-lock.json")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestParse_LockfileVersion1IsRejectedNonFatally(t *testing.T) {
 	fsys := fstest.MapFS{
 		"package-lock.json": &fstest.MapFile{Data: []byte(`{"lockfileVersion":1}`)},
 	}
-	res, err := (NpmLock{}).Parse(fsys, "package-lock.json")
+	res, err := (PackageLock{}).Parse(fsys, "package-lock.json")
 	if err != nil {
 		t.Fatalf("expected non-fatal warning, got error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestNpmLock_CanParse(t *testing.T) {
 		{"", false},
 	}
 	for _, tc := range tests {
-		got := (NpmLock{}).CanParse(tc.path)
+		got := (PackageLock{}).CanParse(tc.path)
 		if got != tc.want {
 			t.Errorf("CanParse(%q) = %v, want %v", tc.path, got, tc.want)
 		}
@@ -131,7 +131,7 @@ func TestParse_StablePackageOrder(t *testing.T) {
 	fsys := fstest.MapFS{
 		"package-lock.json": &fstest.MapFile{Data: []byte(samplePackageLockV3)},
 	}
-	res, _ := (NpmLock{}).Parse(fsys, "package-lock.json")
+	res, _ := (PackageLock{}).Parse(fsys, "package-lock.json")
 	got := make([]string, 0, len(res.Packages))
 	for _, p := range res.Packages {
 		got = append(got, p.PackageID)

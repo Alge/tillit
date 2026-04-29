@@ -1,4 +1,4 @@
-package npmlock
+package npm
 
 import (
 	"bufio"

@@ -1,9 +1,4 @@
-// Package npmlock parses npm package-lock.json files (lockfileVersion
-// 2 and 3) into the canonical PackageRef shape consumed by the trust
-// graph resolver. It also provides ResolveVersion against the npm
-// registry's per-version metadata endpoint so sign-time checks work
-// the same way they do for Go modules.
-package npmlock
+package npm
 
 import (
 	"encoding/json"
@@ -17,15 +12,15 @@ import (
 	"github.com/Alge/tillit/ecosystems"
 )
 
-// NpmLock is the package-lock.json adapter. Implements
+// PackageLock is the package-lock.json adapter. Implements
 // ecosystems.Adapter and ecosystems.GraphResolver (the latter is
 // satisfied here without shelling out — the lockfile already
 // contains all the edges we need).
-type NpmLock struct{ npmCommon }
+type PackageLock struct{ npmCommon }
 
-func (NpmLock) Name() string { return "package-lock.json" }
+func (PackageLock) Name() string { return "package-lock.json" }
 
-func (NpmLock) CanParse(p string) bool {
+func (PackageLock) CanParse(p string) bool {
 	if p == "" {
 		return false
 	}
@@ -58,7 +53,7 @@ type rawLockNode struct {
 	Optional        bool              `json:"optional,omitempty"`
 }
 
-func (NpmLock) Parse(fsys fs.FS, lockfilePath string) (ecosystems.ParseResult, error) {
+func (PackageLock) Parse(fsys fs.FS, lockfilePath string) (ecosystems.ParseResult, error) {
 	f, err := fsys.Open(lockfilePath)
 	if err != nil {
 		return ecosystems.ParseResult{}, fmt.Errorf("open %s: %w", lockfilePath, err)

@@ -13,7 +13,7 @@ import (
 	"github.com/Alge/tillit/ecosystems/composer"
 	"github.com/Alge/tillit/ecosystems/gosum"
 	"github.com/Alge/tillit/ecosystems/hexpm"
-	"github.com/Alge/tillit/ecosystems/npmlock"
+	"github.com/Alge/tillit/ecosystems/npm"
 	"github.com/Alge/tillit/ecosystems/nuget"
 	"github.com/Alge/tillit/ecosystems/pub"
 	"github.com/Alge/tillit/ecosystems/pypi"
@@ -26,8 +26,8 @@ import (
 // a new ecosystem is a one-line change here plus the adapter package.
 var adapters = []ecosystems.Adapter{
 	gosum.GoSum{},
-	npmlock.NpmLock{},
-	npmlock.YarnLock{},
+	npm.PackageLock{},
+	npm.YarnLock{},
 	pypi.Requirements{},
 	pypi.UvLock{},
 	pypi.PoetryLock{},
