@@ -94,12 +94,12 @@ commands:
   publish                     push any locally-cached signatures to registered servers
   mirror push <server>        privately push your sigs+connections to your own server (cross-device backup)
   mirror pull <server>        pull your private sigs+connections back from that server
-  export [--include-peers | --all] [--key <name>] <file>
+  export [--all | --key <name>] [--include-peers] <file>
                               write a snapshot (incl. private key) to a file
-                              default: just your active identity's data
-                              --include-peers: also rows by everyone in your trust graph
-                              --all: every row in the local store
-                              --key <name>: pick a non-active key as the identity
+                              default: active key + own data
+                              --key <name>: a non-active key + its own data
+                              --all: every key + every row (full backup; conflicts with --key)
+                              --include-peers: also rows by signers in the identity's trust graph
   import <file>               merge a previously-exported snapshot into the local store
   status                      show pending pushes and last-sync time per registered server
   query <ecosystem> <pkg> [--verbose]

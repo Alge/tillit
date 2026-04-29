@@ -58,31 +58,32 @@ const (
 
 // Export writes a snapshot of the local store to a file.
 //
-// By default only the active user's own state is included (their key,
-// signatures + connections they signed, plus peers/servers/push-state
-// from this device). --include-peers extends the cached-row scope to
-// every signer in the chosen identity's trust graph (direct +
-// transitive). --all widens further to every row in the local store.
-// --key <name> selects a different identity to export instead of the
-// active one.
+// Two orthogonal axes:
+//
+//   - Which keys: default (active key only), --key <name> (a specific
+//     stored key), or --all (every key, plus every cached row for a
+//     full backup). --key and --all are mutually exclusive.
+//   - Which cached rows for that identity: default (own only) or
+//     --include-peers (also rows by every signer reachable in the
+//     identity's trust graph). --include-peers combines with --key
+//     or the default; with --all it's redundant (--all already
+//     includes everything).
 //
 // The output contains private key material — handle accordingly.
 func Export(args []string) error {
 	scope := scopeSelf
-	scopeFlagsSet := 0
+	dumpAll := false
 	keyName := ""
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
 		case a == "--all" || a == "-a":
-			scope = scopeAll
-			scopeFlagsSet++
+			dumpAll = true
 		case a == "--include-peers":
 			scope = scopeIncludePeers
-			scopeFlagsSet++
 		case a == "--help" || a == "-h":
-			fmt.Fprintln(os.Stderr, "usage: tillit export [--include-peers | --all] [--key <name>] <file>")
+			fmt.Fprintln(os.Stderr, "usage: tillit export [--all | --key <name>] [--include-peers] <file>")
 			return nil
 		case a == "--key" || a == "-k":
 			if i+1 >= len(args) {
@@ -98,11 +99,15 @@ func Export(args []string) error {
 			positional = append(positional, a)
 		}
 	}
-	if scopeFlagsSet > 1 {
-		return fmt.Errorf("--include-peers and --all are mutually exclusive")
+	if dumpAll && keyName != "" {
+		return fmt.Errorf("--all and --key are mutually exclusive — --all dumps every key, --key picks one")
+	}
+	if dumpAll {
+		// Full backup overrides any cached-row scope flag.
+		scope = scopeAll
 	}
 	if len(positional) != 1 {
-		return fmt.Errorf("usage: tillit export [--include-peers | --all] [--key <name>] <file>")
+		return fmt.Errorf("usage: tillit export [--all | --key <name>] [--include-peers] <file>")
 	}
 	path := positional[0]
 
