@@ -31,3 +31,6 @@ config.toml
 # Built binaries when running `go build` from the repo root
 /tillit
 /tillit-server
+
+# Local working notes — not shared
+todo.md
