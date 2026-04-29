@@ -99,6 +99,21 @@ func CreateConnectionHandler(database db.DatabaseConnector) http.HandlerFunc {
 			encode(w, r, http.StatusCreated, conn)
 
 		case models.PayloadTypeConnectionRevocation:
+			target, err := database.GetConnection(payload.TargetID)
+			if err != nil {
+				var notFound *dberrors.ObjectNotFoundError
+				if errors.As(err, &notFound) {
+					http.NotFound(w, r)
+					return
+				}
+				log.Printf("GetConnection failed: %v", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+			if target.Owner != userID {
+				http.Error(w, "Cannot revoke another user's connection", http.StatusForbidden)
+				return
+			}
 			if err := database.RevokeConnection(payload.TargetID, now); err != nil {
 				var notFound *dberrors.ObjectNotFoundError
 				if errors.As(err, &notFound) {

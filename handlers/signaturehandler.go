@@ -18,6 +18,25 @@ func processRevocation(database db.DatabaseConnector, payload *models.Payload, u
 	}
 }
 
+// authorizeSignatureRevocation enforces that a signer may only revoke
+// their own signatures. Returns (notFound, forbidden, internalErr). The
+// caller writes the appropriate HTTP status; non-nil internalErr means
+// log and 500.
+func authorizeSignatureRevocation(database db.DatabaseConnector, targetID, revokerID string) (notFound bool, forbidden bool, internalErr error) {
+	target, err := database.GetSignature(targetID)
+	if err != nil {
+		var nf *dberrors.ObjectNotFoundError
+		if errors.As(err, &nf) {
+			return true, false, nil
+		}
+		return false, false, err
+	}
+	if target.Signer != revokerID {
+		return false, true, nil
+	}
+	return false, false, nil
+}
+
 func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.PathValue("id")
@@ -72,6 +91,26 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 			return
 		}
 
+		// Revocations must be authorised before the signature is stored:
+		// the signer can only revoke their own signatures.
+		payload, err := models.ParsePayload([]byte(input.Payload))
+		if err == nil && payload.IsRevocation() {
+			notFound, forbidden, internalErr := authorizeSignatureRevocation(database, payload.TargetID, userID)
+			if internalErr != nil {
+				log.Printf("authorizeSignatureRevocation failed: %v", internalErr)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+			if notFound {
+				http.Error(w, "Revocation target not found", http.StatusNotFound)
+				return
+			}
+			if forbidden {
+				http.Error(w, "Cannot revoke another signer's signature", http.StatusForbidden)
+				return
+			}
+		}
+
 		uploadedAt := time.Now().UTC()
 		sig := &models.Signature{
 			ID:         input.ID,
@@ -87,8 +126,7 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 			return
 		}
 
-		payload, err := models.ParsePayload([]byte(input.Payload))
-		if err == nil && payload.IsRevocation() {
+		if payload != nil && payload.IsRevocation() {
 			processRevocation(database, payload, uploadedAt)
 		}
 

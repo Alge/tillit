@@ -239,6 +239,68 @@ func uploadDecision(t *testing.T, db *sqliteconnector.SqliteConnector, u *models
 	return sig.ID
 }
 
+func createSecondTestUser(t *testing.T, db *sqliteconnector.SqliteConnector, name string) (*models.User, crypto.Signer) {
+	t.Helper()
+	signer, err := crypto.NewEd25519Signer()
+	if err != nil {
+		t.Fatalf("failed creating signer: %v", err)
+	}
+	u, err := models.NewUserFromSigner(name, signer)
+	if err != nil {
+		t.Fatalf("failed creating user: %v", err)
+	}
+	if err := db.CreateUser(u); err != nil {
+		t.Fatalf("failed storing user: %v", err)
+	}
+	return u, signer
+}
+
+func TestCreateSignatureHandler_RevocationRejectsForeignTarget(t *testing.T) {
+	db := newTestDB(t)
+	alice, aliceSigner := createTestUser(t, db)
+	bob, bobSigner := createSecondTestUser(t, db, "bob")
+
+	// Alice signs an exact decision.
+	aliceSigID := uploadDecision(t, db, alice, aliceSigner, "github.com/foo/bar")
+
+	// Bob tries to revoke Alice's signature.
+	revokePayload := `{"type":"revocation","signer":"` + bob.ID + `","target_id":"` + aliceSigID + `"}`
+	body, _ := json.Marshal(signPayload(t, bobSigner, revokePayload))
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.SetPathValue("id", bob.ID)
+	w := httptest.NewRecorder()
+	handlers.CreateSignatureHandler(db)(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Alice's signature must NOT be revoked.
+	got, err := db.GetSignature(aliceSigID)
+	if err != nil {
+		t.Fatalf("GetSignature failed: %v", err)
+	}
+	if got.Revoked {
+		t.Error("Alice's signature was revoked by Bob — ownership check failed")
+	}
+}
+
+func TestCreateSignatureHandler_RevocationTargetNotFound(t *testing.T) {
+	db := newTestDB(t)
+	u, signer := createTestUser(t, db)
+
+	revokePayload := `{"type":"revocation","signer":"` + u.ID + `","target_id":"does-not-exist"}`
+	body, _ := json.Marshal(signPayload(t, signer, revokePayload))
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.SetPathValue("id", u.ID)
+	w := httptest.NewRecorder()
+	handlers.CreateSignatureHandler(db)(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestCreateSignatureHandler_Revocation(t *testing.T) {
 	db := newTestDB(t)
 	u, signer := createTestUser(t, db)
