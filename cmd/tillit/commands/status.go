@@ -32,7 +32,7 @@ func Status(args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed reading active key: %w", err)
 	}
-	_, userID, err := activeSignerAndID(s)
+	userID, err := activeUserID(s)
 	if err != nil {
 		return err
 	}
