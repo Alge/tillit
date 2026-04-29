@@ -24,7 +24,7 @@ const defaultRegistry = "https://registry.npmjs.org"
 // Honours the npm_config_registry environment variable, which both
 // `npm` and `pnpm` set when the user has configured a private
 // mirror; otherwise falls back to registry.npmjs.org.
-func (NpmLock) ResolveVersion(packageID, version string) (*ecosystems.VersionInfo, error) {
+func (npmCommon) ResolveVersion(packageID, version string) (*ecosystems.VersionInfo, error) {
 	registry := pickRegistry()
 	if registry == "" {
 		return nil, fmt.Errorf("no usable npm registry (set npm_config_registry or use --skip-verify)")

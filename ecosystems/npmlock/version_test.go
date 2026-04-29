@@ -74,9 +74,9 @@ func TestCompareVersions_PreReleaseIdentifierRules(t *testing.T) {
 		a, b string
 		want int
 	}{
-		{"1.0.0-alpha", "1.0.0-alpha.1", -1}, // shorter < longer
+		{"1.0.0-alpha", "1.0.0-alpha.1", -1},      // shorter < longer
 		{"1.0.0-alpha.1", "1.0.0-alpha.beta", -1}, // numeric < non-numeric
-		{"1.0.0-rc.1", "1.0.0-rc.2", -1}, // numeric ordering inside identifier
+		{"1.0.0-rc.1", "1.0.0-rc.2", -1},          // numeric ordering inside identifier
 	}
 	for _, tc := range cases {
 		got := (NpmLock{}).CompareVersions(tc.a, tc.b)
