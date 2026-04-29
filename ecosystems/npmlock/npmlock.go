@@ -21,10 +21,9 @@ import (
 // ecosystems.Adapter and ecosystems.GraphResolver (the latter is
 // satisfied here without shelling out — the lockfile already
 // contains all the edges we need).
-type NpmLock struct{}
+type NpmLock struct{ npmCommon }
 
-func (NpmLock) Ecosystem() string { return "npm" }
-func (NpmLock) Name() string      { return "package-lock.json" }
+func (NpmLock) Name() string { return "package-lock.json" }
 
 func (NpmLock) CanParse(p string) bool {
 	if p == "" {

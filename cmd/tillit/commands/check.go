@@ -20,6 +20,7 @@ import (
 var adapters = []ecosystems.Adapter{
 	gosum.GoSum{},
 	npmlock.NpmLock{},
+	npmlock.YarnLock{},
 	pypi.Requirements{},
 	pypi.UvLock{},
 	pypi.PoetryLock{},
