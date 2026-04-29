@@ -30,7 +30,7 @@ const defaultPackagistURL = "https://repo.packagist.org"
 func (composerCommon) ResolveVersion(packageID, version string) (*ecosystems.VersionInfo, error) {
 	base := pickComposerURL()
 	if base == "" {
-		return nil, fmt.Errorf("no usable Packagist URL (set TILLIT_COMPOSER_URL)")
+		return nil, fmt.Errorf("no usable packagist URL (set TILLIT_COMPOSER_URL)")
 	}
 	endpoint := fmt.Sprintf("%s/p2/%s.json",
 		strings.TrimRight(base, "/"),
@@ -39,26 +39,26 @@ func (composerCommon) ResolveVersion(packageID, version string) (*ecosystems.Ver
 
 	resp, err := http.Get(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("contact Packagist: %w", err)
+		return nil, fmt.Errorf("contact packagist: %w", err)
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 		// fall through
 	case http.StatusNotFound, http.StatusGone:
-		return nil, fmt.Errorf("Packagist: package not found")
+		return nil, fmt.Errorf("packagist: package not found")
 	default:
-		return nil, fmt.Errorf("Packagist returned %s", resp.Status)
+		return nil, fmt.Errorf("packagist returned %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		return nil, fmt.Errorf("read Packagist response: %w", err)
+		return nil, fmt.Errorf("read packagist response: %w", err)
 	}
 
 	var doc packagistResponse
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return nil, fmt.Errorf("parse Packagist JSON: %w", err)
+		return nil, fmt.Errorf("parse packagist JSON: %w", err)
 	}
 
 	versions, ok := doc.Packages[packageID]
@@ -75,7 +75,7 @@ func (composerCommon) ResolveVersion(packageID, version string) (*ecosystems.Ver
 		}
 	}
 	if !ok || len(versions) == 0 {
-		return nil, fmt.Errorf("Packagist: package not found")
+		return nil, fmt.Errorf("packagist: package not found")
 	}
 
 	want := strings.TrimPrefix(version, "v")
@@ -94,7 +94,7 @@ func (composerCommon) ResolveVersion(packageID, version string) (*ecosystems.Ver
 		}
 		return info, nil
 	}
-	return nil, fmt.Errorf("Packagist: version not found")
+	return nil, fmt.Errorf("packagist: version not found")
 }
 
 type packagistResponse struct {

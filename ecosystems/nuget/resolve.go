@@ -28,7 +28,7 @@ const defaultNugetURL = "https://api.nuget.org"
 func (nugetCommon) ResolveVersion(packageID, version string) (*ecosystems.VersionInfo, error) {
 	base := pickNugetURL()
 	if base == "" {
-		return nil, fmt.Errorf("no usable NuGet URL (set TILLIT_NUGET_URL)")
+		return nil, fmt.Errorf("no usable nuget URL (set TILLIT_NUGET_URL)")
 	}
 	id := strings.ToLower(packageID)
 	ver := strings.ToLower(version)
@@ -42,21 +42,21 @@ func (nugetCommon) ResolveVersion(packageID, version string) (*ecosystems.Versio
 
 	resp, err := http.Get(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("contact NuGet: %w", err)
+		return nil, fmt.Errorf("contact nuget: %w", err)
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 		// fall through
 	case http.StatusNotFound, http.StatusGone:
-		return nil, fmt.Errorf("NuGet: version not found")
+		return nil, fmt.Errorf("nuget: version not found")
 	default:
-		return nil, fmt.Errorf("NuGet returned %s", resp.Status)
+		return nil, fmt.Errorf("nuget returned %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if err != nil {
-		return nil, fmt.Errorf("read NuGet response: %w", err)
+		return nil, fmt.Errorf("read nuget response: %w", err)
 	}
 
 	info := &ecosystems.VersionInfo{

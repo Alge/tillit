@@ -35,7 +35,7 @@ const defaultTrunkURL = "https://trunk.cocoapods.org"
 func (cocoapodsCommon) ResolveVersion(packageID, version string) (*ecosystems.VersionInfo, error) {
 	base := pickCocoapodsURL()
 	if base == "" {
-		return nil, fmt.Errorf("no usable CocoaPods URL (set TILLIT_COCOAPODS_URL)")
+		return nil, fmt.Errorf("no usable cocoapods URL (set TILLIT_COCOAPODS_URL)")
 	}
 	umbrella := packageID
 	if i := strings.Index(umbrella, "/"); i >= 0 {
@@ -49,16 +49,16 @@ func (cocoapodsCommon) ResolveVersion(packageID, version string) (*ecosystems.Ve
 
 	resp, err := http.Get(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("contact CocoaPods Trunk: %w", err)
+		return nil, fmt.Errorf("contact cocoapods trunk: %w", err)
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 		// fall through
 	case http.StatusNotFound, http.StatusGone:
-		return nil, fmt.Errorf("CocoaPods Trunk: version not found")
+		return nil, fmt.Errorf("cocoapods trunk: version not found")
 	default:
-		return nil, fmt.Errorf("CocoaPods Trunk returned %s", resp.Status)
+		return nil, fmt.Errorf("cocoapods trunk returned %s", resp.Status)
 	}
 
 	// Drain the body so the connection can be reused. We don't need

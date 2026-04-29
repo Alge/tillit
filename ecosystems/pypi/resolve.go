@@ -26,7 +26,7 @@ const defaultPyPIURL = "https://pypi.org"
 func (pypiCommon) ResolveVersion(packageID, version string) (*ecosystems.VersionInfo, error) {
 	base := pickPyPIURL()
 	if base == "" {
-		return nil, fmt.Errorf("no usable PyPI URL (set TILLIT_PYPI_URL)")
+		return nil, fmt.Errorf("no usable pypi URL (set TILLIT_PYPI_URL)")
 	}
 	canonName := normalizePackageName(packageID)
 	endpoint := fmt.Sprintf("%s/pypi/%s/%s/json",
@@ -37,26 +37,26 @@ func (pypiCommon) ResolveVersion(packageID, version string) (*ecosystems.Version
 
 	resp, err := http.Get(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("contact PyPI: %w", err)
+		return nil, fmt.Errorf("contact pypi: %w", err)
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 		// fall through
 	case http.StatusNotFound, http.StatusGone:
-		return nil, fmt.Errorf("PyPI: version not found")
+		return nil, fmt.Errorf("pypi: version not found")
 	default:
-		return nil, fmt.Errorf("PyPI returned %s", resp.Status)
+		return nil, fmt.Errorf("pypi returned %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
-		return nil, fmt.Errorf("read PyPI response: %w", err)
+		return nil, fmt.Errorf("read pypi response: %w", err)
 	}
 
 	var doc pypiResponse
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return nil, fmt.Errorf("parse PyPI JSON: %w", err)
+		return nil, fmt.Errorf("parse pypi JSON: %w", err)
 	}
 
 	info := &ecosystems.VersionInfo{
