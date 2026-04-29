@@ -13,7 +13,6 @@ import (
 	"github.com/Alge/tillit/db/sqliteconnector"
 	"github.com/Alge/tillit/handlers"
 	"github.com/Alge/tillit/models"
-	"github.com/google/uuid"
 )
 
 func newTestDB(t *testing.T) *sqliteconnector.SqliteConnector {
@@ -55,11 +54,12 @@ func signPayload(t *testing.T, signer crypto.Signer, payload string) sigRequest 
 	if err != nil {
 		t.Fatalf("failed signing: %v", err)
 	}
+	sig := base64.RawURLEncoding.EncodeToString(sigBytes)
 	return sigRequest{
-		ID:        uuid.NewString(),
+		ID:        models.SignatureID(payload, sig),
 		Payload:   payload,
 		Algorithm: signer.Algorithm(),
-		Sig:       base64.RawURLEncoding.EncodeToString(sigBytes),
+		Sig:       sig,
 	}
 }
 
@@ -110,6 +110,25 @@ func TestCreateSignatureHandler_UserNotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestCreateSignatureHandler_RejectsMismatchedID(t *testing.T) {
+	db := newTestDB(t)
+	u, signer := createTestUser(t, db)
+
+	payload := `{"type":"vetted"}`
+	req := signPayload(t, signer, payload)
+	req.ID = "deadbeef" // tampered, doesn't match hash
+	body, _ := json.Marshal(req)
+
+	httpReq := httptest.NewRequest(http.MethodPost, "/v1/users/"+u.ID+"/signatures", bytes.NewReader(body))
+	httpReq.SetPathValue("id", u.ID)
+	w := httptest.NewRecorder()
+	handlers.CreateSignatureHandler(db)(w, httpReq)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for mismatched ID, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
