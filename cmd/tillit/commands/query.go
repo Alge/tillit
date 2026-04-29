@@ -92,10 +92,24 @@ func verboseDecisionLine(d resolver.ContributingDecision) string {
 	}
 
 	out := head + " " + by
+	if d.SignatureID != "" {
+		out += " [" + shortHash(d.SignatureID) + "]"
+	}
 	if d.Reason != "" {
 		out += ": " + d.Reason
 	}
 	return out
+}
+
+// shortHash returns the leading hex chars of a content-hash signature
+// ID — long enough to be unambiguous in practice (4 billion signatures
+// would still have <0.0006 collision probability for an 8-char prefix)
+// and short enough to fit in CLI output. Pass to `inspect` to expand.
+func shortHash(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[:8]
 }
 
 func shortPath(p []string) []string {
@@ -106,14 +120,20 @@ func shortPath(p []string) []string {
 	return out
 }
 
-// decisionsSummary returns a short suffix listing the signers (and reasons,
-// when present) behind the verdict — enough context to understand why
-// without dumping the full structure.
+// decisionsSummary returns a short suffix listing the signers (with the
+// short hash of one contributing signature each) and reasons behind the
+// verdict — enough context to understand why without dumping the full
+// structure. The hash lets the user feed it to `inspect` for details.
 func decisionsSummary(ds []resolver.ContributingDecision) string {
-	signers := map[string]bool{}
+	type signerInfo struct {
+		hash string
+	}
+	signers := map[string]signerInfo{}
 	var reasons []string
 	for _, d := range ds {
-		signers[d.SignerID] = true
+		if _, ok := signers[d.SignerID]; !ok {
+			signers[d.SignerID] = signerInfo{hash: d.SignatureID}
+		}
 		if d.Reason != "" {
 			reasons = append(reasons, d.Reason)
 		}
@@ -124,10 +144,19 @@ func decisionsSummary(ds []resolver.ContributingDecision) string {
 
 	names := make([]string, 0, len(signers))
 	for s := range signers {
-		names = append(names, shortID(s))
+		names = append(names, s)
 	}
 	sort.Strings(names)
-	out := " (" + strings.Join(names, ", ")
+
+	parts := make([]string, len(names))
+	for i, s := range names {
+		entry := shortID(s)
+		if h := signers[s].hash; h != "" {
+			entry += " " + shortHash(h)
+		}
+		parts[i] = entry
+	}
+	out := " (" + strings.Join(parts, ", ")
 	if len(reasons) > 0 {
 		first := reasons[0]
 		if len(first) > 60 {
