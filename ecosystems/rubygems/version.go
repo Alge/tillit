@@ -1,6 +1,7 @@
 package rubygems
 
 import (
+	"cmp"
 	"strconv"
 	"strings"
 )
@@ -44,7 +45,7 @@ func compareGemVersion(a, b string) int {
 		bNum, bIsNum := tryAtoi(bSeg)
 		switch {
 		case aIsNum && bIsNum:
-			if c := cmpInt(aNum, bNum); c != 0 {
+			if c := cmp.Compare(aNum, bNum); c != 0 {
 				return c
 			}
 		case aIsNum:
@@ -53,7 +54,7 @@ func compareGemVersion(a, b string) int {
 		case bIsNum:
 			return -1
 		default:
-			if c := strCmp(aSeg, bSeg); c != 0 {
+			if c := cmp.Compare(aSeg, bSeg); c != 0 {
 				return c
 			}
 		}
@@ -131,26 +132,4 @@ func tryAtoi(s string) (int, bool) {
 		return 0, false
 	}
 	return n, true
-}
-
-func cmpInt(a, b int) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
-}
-
-func strCmp(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
 }

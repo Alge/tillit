@@ -1,6 +1,7 @@
 package pypi
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -156,7 +157,7 @@ func comparePEP440(a, b string) int {
 	pb, errB := parseVersion(b)
 	switch {
 	case errA != nil && errB != nil:
-		return strCmp(a, b)
+		return cmp.Compare(a, b)
 	case errA != nil:
 		return -1
 	case errB != nil:
@@ -190,7 +191,7 @@ func classifyPhase(v *version) int {
 }
 
 func cmpVersion(a, b *version) int {
-	if c := cmpInt(a.epoch, b.epoch); c != 0 {
+	if c := cmp.Compare(a.epoch, b.epoch); c != 0 {
 		return c
 	}
 	if c := cmpRelease(a.release, b.release); c != 0 {
@@ -198,30 +199,30 @@ func cmpVersion(a, b *version) int {
 	}
 	pa, pb := classifyPhase(a), classifyPhase(b)
 	if pa != pb {
-		return cmpInt(pa, pb)
+		return cmp.Compare(pa, pb)
 	}
 	switch pa {
 	case phaseDevOnly:
-		if c := cmpInt(a.devNum, b.devNum); c != 0 {
+		if c := cmp.Compare(a.devNum, b.devNum); c != 0 {
 			return c
 		}
 	case phasePre:
-		if c := cmpInt(preKindRank(a.preKind), preKindRank(b.preKind)); c != 0 {
+		if c := cmp.Compare(preKindRank(a.preKind), preKindRank(b.preKind)); c != 0 {
 			return c
 		}
-		if c := cmpInt(a.preNum, b.preNum); c != 0 {
+		if c := cmp.Compare(a.preNum, b.preNum); c != 0 {
 			return c
 		}
 		// Absent dev (-1) sorts after any present dev — flip the
 		// sentinel before comparing.
-		if c := cmpInt(devForOrder(a.devNum), devForOrder(b.devNum)); c != 0 {
+		if c := cmp.Compare(devForOrder(a.devNum), devForOrder(b.devNum)); c != 0 {
 			return c
 		}
 	case phasePost:
-		if c := cmpInt(a.postNum, b.postNum); c != 0 {
+		if c := cmp.Compare(a.postNum, b.postNum); c != 0 {
 			return c
 		}
-		if c := cmpInt(devForOrder(a.devNum), devForOrder(b.devNum)); c != 0 {
+		if c := cmp.Compare(devForOrder(a.devNum), devForOrder(b.devNum)); c != 0 {
 			return c
 		}
 	}
@@ -281,7 +282,7 @@ func cmpRelease(a, b []int) int {
 		if i < len(b) {
 			bv = b[i]
 		}
-		if c := cmpInt(av, bv); c != 0 {
+		if c := cmp.Compare(av, bv); c != 0 {
 			return c
 		}
 	}
@@ -321,7 +322,7 @@ func cmpLocal(a, b string) int {
 		bx, bIsNum := asLocalSegment(bs[i])
 		switch {
 		case aIsNum && bIsNum:
-			if c := cmpInt(ax.(int), bx.(int)); c != 0 {
+			if c := cmp.Compare(ax.(int), bx.(int)); c != 0 {
 				return c
 			}
 		case aIsNum:
@@ -329,7 +330,7 @@ func cmpLocal(a, b string) int {
 		case bIsNum:
 			return -1
 		default:
-			if c := strCmp(ax.(string), bx.(string)); c != 0 {
+			if c := cmp.Compare(ax.(string), bx.(string)); c != 0 {
 				return c
 			}
 		}
@@ -359,26 +360,4 @@ func asLocalSegment(s string) (any, bool) {
 	}
 	n, _ := strconv.Atoi(s)
 	return n, true
-}
-
-func cmpInt(a, b int) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
-}
-
-func strCmp(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
 }

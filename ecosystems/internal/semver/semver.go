@@ -11,6 +11,7 @@
 package semver
 
 import (
+	"cmp"
 	"fmt"
 	"strconv"
 	"strings"
@@ -42,19 +43,19 @@ func Compare(a, b string) int {
 	pb, errB := parse(b)
 	switch {
 	case errA != nil && errB != nil:
-		return strCmp(a, b)
+		return cmp.Compare(a, b)
 	case errA != nil:
 		return -1
 	case errB != nil:
 		return 1
 	}
-	if c := cmpInt(pa.major, pb.major); c != 0 {
+	if c := cmp.Compare(pa.major, pb.major); c != 0 {
 		return c
 	}
-	if c := cmpInt(pa.minor, pb.minor); c != 0 {
+	if c := cmp.Compare(pa.minor, pb.minor); c != 0 {
 		return c
 	}
-	if c := cmpInt(pa.patch, pb.patch); c != 0 {
+	if c := cmp.Compare(pa.patch, pb.patch); c != 0 {
 		return c
 	}
 	switch {
@@ -185,7 +186,7 @@ func cmpPreRelease(a, b []string) int {
 		case aIsNum && bIsNum:
 			an, _ := strconv.Atoi(a[i])
 			bn, _ := strconv.Atoi(b[i])
-			if c := cmpInt(an, bn); c != 0 {
+			if c := cmp.Compare(an, bn); c != 0 {
 				return c
 			}
 		case aIsNum:
@@ -193,7 +194,7 @@ func cmpPreRelease(a, b []string) int {
 		case bIsNum:
 			return 1
 		default:
-			if c := strCmp(a[i], b[i]); c != 0 {
+			if c := cmp.Compare(a[i], b[i]); c != 0 {
 				return c
 			}
 		}
@@ -211,26 +212,4 @@ func isAllDigits(s string) bool {
 		}
 	}
 	return true
-}
-
-func cmpInt(a, b int) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
-}
-
-func strCmp(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
 }
