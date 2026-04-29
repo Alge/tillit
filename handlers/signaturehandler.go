@@ -10,6 +10,7 @@ import (
 	"github.com/Alge/tillit/db"
 	"github.com/Alge/tillit/db/dberrors"
 	"github.com/Alge/tillit/models"
+	"github.com/Alge/tillit/requestdata"
 )
 
 func processRevocation(database db.DatabaseConnector, payload *models.Payload, uploadedAt time.Time) {
@@ -58,6 +59,7 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 			Payload   string `json:"payload"`
 			Algorithm string `json:"algorithm"`
 			Sig       string `json:"sig"`
+			Public    *bool  `json:"public,omitempty"` // default true (legacy clients)
 		}
 		input, err := decode[sigInput](r)
 		if err != nil {
@@ -120,6 +122,21 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 			}
 		}
 
+		// Default visibility is public; private uploads (the cross-device
+		// mirror flow) require the request to be authenticated as the
+		// signer.
+		isPublic := true
+		if input.Public != nil {
+			isPublic = *input.Public
+		}
+		if !isPublic {
+			authedUser, ok := requestdata.GetUser(r)
+			if !ok || authedUser.ID != userID {
+				http.Error(w, "Private uploads require authentication as the signer", http.StatusUnauthorized)
+				return
+			}
+		}
+
 		uploadedAt := time.Now().UTC()
 		sig := &models.Signature{
 			ID:         input.ID,
@@ -128,6 +145,7 @@ func CreateSignatureHandler(database db.DatabaseConnector) http.HandlerFunc {
 			Algorithm:  input.Algorithm,
 			Sig:        input.Sig,
 			UploadedAt: uploadedAt,
+			Public:     isPublic,
 		}
 		if err := database.CreateSignature(sig); err != nil {
 			log.Printf("CreateSignature failed: %v", err)
@@ -157,7 +175,13 @@ func GetUserSignaturesHandler(database db.DatabaseConnector) http.HandlerFunc {
 			since = &t
 		}
 
-		sigs, err := database.GetUserSignatures(userID, since)
+		// Authenticated owners see their full set (public + private);
+		// everyone else gets only the public rows.
+		includePrivate := false
+		if u, ok := requestdata.GetUser(r); ok && u.ID == userID {
+			includePrivate = true
+		}
+		sigs, err := database.GetUserSignatures(userID, since, includePrivate)
 		if err != nil {
 			log.Printf("GetUserSignatures failed: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)

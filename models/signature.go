@@ -16,6 +16,13 @@ type Signature struct {
 	UploadedAt time.Time  `json:"uploaded_at"`
 	Revoked    bool       `json:"revoked,omitempty"`
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+
+	// Public reports whether the signature is discoverable by other
+	// peers via the public GET endpoint. Signatures pushed via
+	// `publish` are public; signatures pushed via `mirror` (the
+	// owner's cross-device backup) are private and only returned on
+	// authenticated owner-only endpoints.
+	Public bool `json:"public"`
 }
 
 // SignatureID returns the canonical, content-addressed identifier for a

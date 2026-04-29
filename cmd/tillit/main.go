@@ -42,6 +42,8 @@ func main() {
 		err = commands.Sync(args)
 	case "publish":
 		err = commands.Publish(args)
+	case "mirror":
+		err = commands.Mirror(args)
 	case "status":
 		err = commands.Status(args)
 	case "query":
@@ -86,6 +88,8 @@ commands:
                               (use revoke instead once a signature is on a server)
   sync                        pull signatures from all trusted peers into local cache
   publish                     push any locally-cached signatures to registered servers
+  mirror push <server>        privately push your sigs+connections to your own server (cross-device backup)
+  mirror pull <server>        pull your private sigs+connections back from that server
   status                      show pending pushes and last-sync time per registered server
   query <ecosystem> <pkg> [--verbose]
                               show trusted versions of a package, grouped by status

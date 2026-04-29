@@ -17,6 +17,12 @@ type (
 	server struct {
 		HostName string
 		Port     int
+		// PublicURL is the externally-reachable base URL clients use to
+		// contact this server (e.g. "https://tillit.example.com"). It's
+		// embedded in signed auth tokens so a token signed for one
+		// server can't be replayed against another. Required when
+		// authenticated endpoints are in use.
+		PublicURL string
 	}
 
 	ratelimit struct {

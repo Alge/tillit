@@ -13,6 +13,7 @@ import (
 	"github.com/Alge/tillit/db/sqliteconnector"
 	"github.com/Alge/tillit/handlers"
 	"github.com/Alge/tillit/models"
+	"github.com/Alge/tillit/requestdata"
 )
 
 func newTestDB(t *testing.T) *sqliteconnector.SqliteConnector {
@@ -277,6 +278,92 @@ func createSecondTestUser(t *testing.T, db *sqliteconnector.SqliteConnector, nam
 		t.Fatalf("failed storing user: %v", err)
 	}
 	return u, signer
+}
+
+func TestCreateSignatureHandler_PrivateRequiresAuth(t *testing.T) {
+	db := newTestDB(t)
+	u, signer := createTestUser(t, db)
+
+	pkg := "github.com/foo/bar"
+	payload := `{"type":"decision","signer":"` + u.ID + `","ecosystem":"go","package_id":"` + pkg + `","version":"v1.0.0","level":"vetted"}`
+	req := signPayload(t, signer, payload)
+	private := false
+	body, _ := json.Marshal(struct {
+		ID        string `json:"id"`
+		Payload   string `json:"payload"`
+		Algorithm string `json:"algorithm"`
+		Sig       string `json:"sig"`
+		Public    *bool  `json:"public"`
+	}{
+		ID: req.ID, Payload: req.Payload, Algorithm: req.Algorithm, Sig: req.Sig, Public: &private,
+	})
+
+	httpReq := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	httpReq.SetPathValue("id", u.ID)
+	w := httptest.NewRecorder()
+	// No requestdata.WithUser context — represents anonymous request.
+	handlers.CreateSignatureHandler(db)(w, httpReq)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for anonymous private upload, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGetUserSignatures_AnonymousHidesPrivate(t *testing.T) {
+	db := newTestDB(t)
+	u, _ := createTestUser(t, db)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := db.CreateSignature(&models.Signature{
+		ID: "pub", Signer: u.ID, Payload: "{}", Algorithm: "ed25519",
+		Sig: "x", UploadedAt: now, Public: true,
+	}); err != nil {
+		t.Fatalf("create public: %v", err)
+	}
+	if err := db.CreateSignature(&models.Signature{
+		ID: "priv", Signer: u.ID, Payload: "{}", Algorithm: "ed25519",
+		Sig: "x", UploadedAt: now, Public: false,
+	}); err != nil {
+		t.Fatalf("create private: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.SetPathValue("id", u.ID)
+	w := httptest.NewRecorder()
+	handlers.GetUserSignaturesHandler(db)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var sigs []*models.Signature
+	json.NewDecoder(w.Body).Decode(&sigs)
+	if len(sigs) != 1 || sigs[0].ID != "pub" {
+		t.Errorf("anonymous request must see only public; got %+v", sigs)
+	}
+}
+
+func TestGetUserSignatures_OwnerSeesPrivate(t *testing.T) {
+	db := newTestDB(t)
+	u, _ := createTestUser(t, db)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	db.CreateSignature(&models.Signature{ID: "pub", Signer: u.ID, Payload: "{}", Algorithm: "ed25519", Sig: "x", UploadedAt: now, Public: true})
+	db.CreateSignature(&models.Signature{ID: "priv", Signer: u.ID, Payload: "{}", Algorithm: "ed25519", Sig: "x", UploadedAt: now, Public: false})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.SetPathValue("id", u.ID)
+	req = requestdata.WithUser(req, u) // simulates middleware-attached user
+	w := httptest.NewRecorder()
+	handlers.GetUserSignaturesHandler(db)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var sigs []*models.Signature
+	json.NewDecoder(w.Body).Decode(&sigs)
+	if len(sigs) != 2 {
+		t.Errorf("owner request must see both rows, got %d: %+v", len(sigs), sigs)
+	}
 }
 
 func TestCreateSignatureHandler_RevocationRejectsForeignTarget(t *testing.T) {
