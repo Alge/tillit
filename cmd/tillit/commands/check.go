@@ -10,6 +10,7 @@ import (
 	"github.com/Alge/tillit/ecosystems"
 	"github.com/Alge/tillit/ecosystems/gosum"
 	"github.com/Alge/tillit/ecosystems/npmlock"
+	"github.com/Alge/tillit/ecosystems/pypi"
 	"github.com/Alge/tillit/resolver"
 )
 
@@ -18,6 +19,11 @@ import (
 var adapters = []ecosystems.Adapter{
 	gosum.GoSum{},
 	npmlock.NpmLock{},
+	pypi.Requirements{},
+	pypi.UvLock{},
+	pypi.PoetryLock{},
+	pypi.PipfileLock{},
+	pypi.PdmLock{},
 }
 
 func Check(args []string) error {
