@@ -62,6 +62,37 @@ func addConnection(t *testing.T, s *localstore.Store, signer, other string, trus
 	}
 }
 
+func TestTrustSet_PublicAPI(t *testing.T) {
+	s := newTestStore(t)
+	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 2})
+	addConnection(t, s, "alice", "bob", 1)
+	addConnection(t, s, "bob", "carol", 0)
+
+	r := New(s, "me")
+	entries, err := r.TrustSet("me")
+	if err != nil {
+		t.Fatalf("TrustSet: %v", err)
+	}
+
+	byID := map[string]TrustEntry{}
+	for _, e := range entries {
+		byID[e.SignerID] = e
+	}
+
+	if _, ok := byID["me"]; !ok || len(byID["me"].Path) != 0 {
+		t.Errorf("viewer should be present with empty Path, got: %+v", byID["me"])
+	}
+	if e, ok := byID["alice"]; !ok || len(e.Path) != 1 {
+		t.Errorf("alice should be direct (Path length 1), got: %+v", e)
+	}
+	if e, ok := byID["bob"]; !ok || len(e.Path) != 2 {
+		t.Errorf("bob should be transitive at depth 2, got: %+v", e)
+	}
+	if e, ok := byID["carol"]; !ok || len(e.Path) != 3 {
+		t.Errorf("carol should be transitive at depth 3, got: %+v", e)
+	}
+}
+
 func TestBuildTrustSet_DirectPeerOnly(t *testing.T) {
 	s := newTestStore(t)
 	addPeer(t, s, &localstore.Peer{ID: "alice", ServerURL: "https://x", TrustDepth: 1})
