@@ -116,6 +116,62 @@ func TestCreateConnectionHandler_Revocation(t *testing.T) {
 	}
 }
 
+func TestCreateConnectionHandler_RevocationRejectsForeignTarget(t *testing.T) {
+	db := newTestDB(t)
+	alice, aliceSigner := createTestUser(t, db)
+	bob, bobSigner := createSecondTestUser(t, db, "bob")
+
+	// Alice creates a connection to "carol".
+	connID := uuid.NewString()
+	payload := `{"type":"connection","signer":"` + alice.ID + `","other_id":"carol","public":true,"trust":true}`
+	body, _ := json.Marshal(signConnPayload(t, aliceSigner, connID, payload))
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.SetPathValue("id", alice.ID)
+	w := httptest.NewRecorder()
+	handlers.CreateConnectionHandler(db)(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("alice create: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Bob tries to revoke Alice's connection.
+	revID := uuid.NewString()
+	revPayload := `{"type":"connection_revocation","signer":"` + bob.ID + `","target_id":"` + connID + `"}`
+	body, _ = json.Marshal(signConnPayload(t, bobSigner, revID, revPayload))
+	req = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.SetPathValue("id", bob.ID)
+	w = httptest.NewRecorder()
+	handlers.CreateConnectionHandler(db)(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+
+	got, err := db.GetConnection(connID)
+	if err != nil {
+		t.Fatalf("GetConnection failed: %v", err)
+	}
+	if got.Revoked {
+		t.Error("Alice's connection was revoked by Bob — ownership check failed")
+	}
+}
+
+func TestCreateConnectionHandler_RevocationTargetNotFound(t *testing.T) {
+	db := newTestDB(t)
+	u, signer := createTestUser(t, db)
+
+	revID := uuid.NewString()
+	revPayload := `{"type":"connection_revocation","signer":"` + u.ID + `","target_id":"does-not-exist"}`
+	body, _ := json.Marshal(signConnPayload(t, signer, revID, revPayload))
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.SetPathValue("id", u.ID)
+	w := httptest.NewRecorder()
+	handlers.CreateConnectionHandler(db)(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestGetUserConnectionsHandler_PublicOnly(t *testing.T) {
 	db := newTestDB(t)
 	u, signer := createTestUser(t, db)
