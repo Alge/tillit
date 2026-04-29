@@ -9,6 +9,7 @@ import (
 
 	"github.com/Alge/tillit/ecosystems"
 	"github.com/Alge/tillit/ecosystems/gosum"
+	"github.com/Alge/tillit/ecosystems/pypi"
 	"github.com/Alge/tillit/resolver"
 )
 
@@ -16,6 +17,11 @@ import (
 // a new ecosystem is a one-line change here plus the adapter package.
 var adapters = []ecosystems.Adapter{
 	gosum.GoSum{},
+	pypi.Requirements{},
+	pypi.UvLock{},
+	pypi.PoetryLock{},
+	pypi.PipfileLock{},
+	pypi.PdmLock{},
 }
 
 func Check(args []string) error {
