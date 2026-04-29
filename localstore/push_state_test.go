@@ -44,6 +44,34 @@ func TestRecordAndCheckPush(t *testing.T) {
 	}
 }
 
+func TestHasBeenPushed(t *testing.T) {
+	s := newTestStore(t)
+
+	got, err := s.HasBeenPushed("sig-1", localstore.ItemSignature)
+	if err != nil {
+		t.Fatalf("HasBeenPushed: %v", err)
+	}
+	if got {
+		t.Error("expected HasBeenPushed=false before any push")
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	if err := s.RecordPush("sig-1", localstore.ItemSignature, "https://a", now); err != nil {
+		t.Fatalf("RecordPush: %v", err)
+	}
+
+	got, _ = s.HasBeenPushed("sig-1", localstore.ItemSignature)
+	if !got {
+		t.Error("expected HasBeenPushed=true after recording for any server")
+	}
+
+	// Different item type stays unpushed.
+	got, _ = s.HasBeenPushed("sig-1", localstore.ItemConnection)
+	if got {
+		t.Error("HasBeenPushed must respect itemType")
+	}
+}
+
 func TestRecordPush_Idempotent(t *testing.T) {
 	s := newTestStore(t)
 

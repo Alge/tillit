@@ -126,6 +126,29 @@ func TestLookupCachedSignature_NotFound(t *testing.T) {
 	}
 }
 
+func TestDeleteCachedSignature(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	s.SaveCachedSignature(&localstore.CachedSignature{
+		ID: "sig-1", Signer: "alice", Payload: "{}",
+		Algorithm: "ed25519", Sig: "x", UploadedAt: now, FetchedAt: now,
+	})
+
+	if err := s.DeleteCachedSignature("sig-1"); err != nil {
+		t.Fatalf("DeleteCachedSignature: %v", err)
+	}
+	if _, err := s.GetCachedSignature("sig-1"); err == nil {
+		t.Error("expected signature gone after delete")
+	}
+}
+
+func TestDeleteCachedSignature_Missing(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.DeleteCachedSignature("nope"); err == nil {
+		t.Error("expected error deleting missing signature")
+	}
+}
+
 func TestSaveCachedSignature_Upsert(t *testing.T) {
 	s := newTestStore(t)
 

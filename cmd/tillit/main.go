@@ -36,6 +36,8 @@ func main() {
 		err = commands.Sign(args)
 	case "revoke":
 		err = commands.Revoke(args)
+	case "delete":
+		err = commands.Delete(args)
 	case "sync":
 		err = commands.Sync(args)
 	case "publish":
@@ -80,6 +82,8 @@ commands:
   sign delta <eco> <pkg> <from> <to> --level <l> [--reason "..."]
                               sign review of the changes between two versions
   revoke <signature_id>       revoke a previously published decision
+  delete <signature_id>       remove a locally-cached signature that has not yet been pushed
+                              (use revoke instead once a signature is on a server)
   sync                        pull signatures from all trusted peers into local cache
   publish                     push any locally-cached signatures to registered servers
   status                      show pending pushes and last-sync time per registered server

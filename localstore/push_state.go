@@ -30,6 +30,22 @@ func (s *Store) RecordPush(itemID string, itemType ItemType, serverURL string, a
 	return err
 }
 
+// HasBeenPushed reports whether the item has been pushed to ANY
+// server. Used by 'tillit delete' to decide whether outright deletion
+// is safe (no peer has fetched it) or whether the user needs to revoke
+// instead.
+func (s *Store) HasBeenPushed(itemID string, itemType ItemType) (bool, error) {
+	var n int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM push_state WHERE item_id = ? AND item_type = ?`,
+		itemID, string(itemType),
+	).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 func (s *Store) IsPushed(itemID string, itemType ItemType, serverURL string) (bool, error) {
 	var n int
 	err := s.db.QueryRow(
