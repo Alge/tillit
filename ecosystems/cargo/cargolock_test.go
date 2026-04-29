@@ -6,6 +6,7 @@ import (
 	"testing/fstest"
 
 	"github.com/Alge/tillit/ecosystems/cargo"
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 )
 
 type cargoPackage struct {
@@ -28,15 +29,6 @@ func parseCargo(t *testing.T, content string) (pkgs []cargoPackage, warnings []s
 		pkgs = append(pkgs, cargoPackage{p.PackageID, p.Version})
 	}
 	return pkgs, res.Warnings
-}
-
-func anyContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestCargoLock_Identity(t *testing.T) {
@@ -116,7 +108,7 @@ source = "git+https://github.com/foo/bar.git#abc123def"
 	if len(pkgs) != 1 || pkgs[0].ID != "ok" {
 		t.Errorf("expected only registry pkg, got: %+v", pkgs)
 	}
-	if !anyContains(warnings, "from-git") {
+	if !testutil.WarningContains(warnings, "from-git") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }
@@ -158,7 +150,7 @@ source = "path+file:///home/me/local"
 	if len(pkgs) != 0 {
 		t.Errorf("expected no packages, got: %+v", pkgs)
 	}
-	if !anyContains(warnings, "from-path") {
+	if !testutil.WarningContains(warnings, "from-path") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }

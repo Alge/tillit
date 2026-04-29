@@ -1,11 +1,11 @@
 package hexpm_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/Alge/tillit/ecosystems/hexpm"
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 )
 
 type rebarPackage struct {
@@ -28,15 +28,6 @@ func parseRebar(t *testing.T, content string) (pkgs []rebarPackage, warnings []s
 		pkgs = append(pkgs, rebarPackage{p.PackageID, p.Version, p.Hash})
 	}
 	return pkgs, res.Warnings
-}
-
-func rebarWarningContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestRebarLock_Identity(t *testing.T) {
@@ -133,7 +124,7 @@ func TestRebarLock_Parse_SkipsGitSource(t *testing.T) {
 	if len(pkgs) != 1 || pkgs[0].ID != "ok" {
 		t.Errorf("expected only hex pkg, got: %+v", pkgs)
 	}
-	if !rebarWarningContains(warnings, "from_git") {
+	if !testutil.WarningContains(warnings, "from_git") {
 		t.Errorf("expected git warning, got: %v", warnings)
 	}
 }
@@ -143,7 +134,7 @@ func TestRebarLock_Parse_SkipsRawSource(t *testing.T) {
 	_, warnings := parseRebar(t, `{"1.2.0",[{<<"raw_dep">>,{raw,"path/to/something"},0}]}.
 [].
 `)
-	if !rebarWarningContains(warnings, "raw_dep") {
+	if !testutil.WarningContains(warnings, "raw_dep") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }

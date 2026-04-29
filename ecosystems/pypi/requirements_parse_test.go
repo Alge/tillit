@@ -1,10 +1,10 @@
 package pypi_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 	"github.com/Alge/tillit/ecosystems/pypi"
 )
 
@@ -152,7 +152,7 @@ func TestRequirements_Parse_WarnsOnLooseSpec(t *testing.T) {
 	_, warnings := parseReq(t, map[string]string{
 		"requirements.txt": "requests>=2.0\n",
 	})
-	if !anyContains(warnings, "pinned") {
+	if !testutil.WarningContains(warnings, "pinned") {
 		t.Errorf("expected warning about non-pinned requirement, got: %v", warnings)
 	}
 }
@@ -161,7 +161,7 @@ func TestRequirements_Parse_WarnsOnURLInstall(t *testing.T) {
 	_, warnings := parseReq(t, map[string]string{
 		"requirements.txt": "git+https://github.com/foo/bar.git@v1.0.0#egg=bar\n",
 	})
-	if !anyContains(warnings, "URL") {
+	if !testutil.WarningContains(warnings, "URL") {
 		t.Errorf("expected URL/VCS warning, got: %v", warnings)
 	}
 }
@@ -170,7 +170,7 @@ func TestRequirements_Parse_WarnsOnIncludeOption(t *testing.T) {
 	_, warnings := parseReq(t, map[string]string{
 		"requirements.txt": "-r other-requirements.txt\n",
 	})
-	if !anyContains(warnings, "option") && !anyContains(warnings, "-r") {
+	if !testutil.WarningContains(warnings, "option") && !testutil.WarningContains(warnings, "-r") {
 		t.Errorf("expected option warning, got: %v", warnings)
 	}
 }
@@ -179,7 +179,7 @@ func TestRequirements_Parse_WarnsOnEditable(t *testing.T) {
 	_, warnings := parseReq(t, map[string]string{
 		"requirements.txt": "-e .\n",
 	})
-	if !anyContains(warnings, "option") && !anyContains(warnings, "-e") {
+	if !testutil.WarningContains(warnings, "option") && !testutil.WarningContains(warnings, "-e") {
 		t.Errorf("expected editable warning, got: %v", warnings)
 	}
 }
@@ -189,13 +189,4 @@ func TestRequirements_Parse_MissingFileErrors(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error when file missing, got: %+v", res)
 	}
-}
-
-func anyContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }

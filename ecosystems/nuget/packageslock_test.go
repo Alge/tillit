@@ -1,10 +1,10 @@
 package nuget_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 	"github.com/Alge/tillit/ecosystems/nuget"
 )
 
@@ -28,15 +28,6 @@ func parseNuget(t *testing.T, content string) (pkgs []nugetPackage, warnings []s
 		pkgs = append(pkgs, nugetPackage{p.PackageID, p.Version})
 	}
 	return pkgs, res.Warnings
-}
-
-func anyContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestPackagesLock_Identity(t *testing.T) {
@@ -179,7 +170,7 @@ func TestPackagesLock_Parse_SkipsEntryWithoutResolved(t *testing.T) {
     }
   }
 }`)
-	if !anyContains(warnings, "WithoutResolved") {
+	if !testutil.WarningContains(warnings, "WithoutResolved") {
 		t.Errorf("expected warning about missing resolved version, got: %v", warnings)
 	}
 }

@@ -1,10 +1,10 @@
 package swiftpm_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 	"github.com/Alge/tillit/ecosystems/swiftpm"
 )
 
@@ -28,15 +28,6 @@ func parseSwift(t *testing.T, content string) (pkgs []swiftPackage, warnings []s
 		pkgs = append(pkgs, swiftPackage{p.PackageID, p.Version})
 	}
 	return pkgs, res.Warnings
-}
-
-func anyContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestPackageResolved_Identity(t *testing.T) {
@@ -137,7 +128,7 @@ func TestPackageResolved_Parse_SkipsBranchPin(t *testing.T) {
   ],
   "version": 2
 }`)
-	if !anyContains(warnings, "branch-pinned") {
+	if !testutil.WarningContains(warnings, "branch-pinned") {
 		t.Errorf("expected warning for branch pin, got: %v", warnings)
 	}
 }
@@ -157,7 +148,7 @@ func TestPackageResolved_Parse_SkipsRevisionPin(t *testing.T) {
   ],
   "version": 2
 }`)
-	if !anyContains(warnings, "commit-pinned") {
+	if !testutil.WarningContains(warnings, "commit-pinned") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }
@@ -173,7 +164,7 @@ func TestPackageResolved_Parse_SkipsFileSystemKind(t *testing.T) {
   ],
   "version": 2
 }`)
-	if !anyContains(warnings, "local-package") {
+	if !testutil.WarningContains(warnings, "local-package") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }

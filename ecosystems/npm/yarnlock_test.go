@@ -5,6 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 	"github.com/Alge/tillit/ecosystems/npm"
 )
 
@@ -159,7 +160,7 @@ func TestYarnLock_Parse_SkipsBlocksWithoutVersion(t *testing.T) {
   resolved "..."
   integrity "sha512-foo"
 `)
-	if !contains(warnings, "weird") {
+	if !testutil.WarningContains(warnings, "weird") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }
@@ -171,7 +172,7 @@ func TestYarnLock_Parse_WarnsOnGitProtocol(t *testing.T) {
   version "1.0.0"
   resolved "git+https://github.com/foo/bar.git#abc123"
 `)
-	if !contains(warnings, "from-git") {
+	if !testutil.WarningContains(warnings, "from-git") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }
@@ -188,13 +189,4 @@ func TestYarnLock_Parse_EmptyLockfile(t *testing.T) {
 	if len(pkgs) != 0 {
 		t.Errorf("expected no packages, got: %+v", pkgs)
 	}
-}
-
-func contains(xs []string, sub string) bool {
-	for _, x := range xs {
-		if strings.Contains(x, sub) {
-			return true
-		}
-	}
-	return false
 }

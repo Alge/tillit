@@ -1,10 +1,10 @@
 package pub_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 	"github.com/Alge/tillit/ecosystems/pub"
 )
 
@@ -28,15 +28,6 @@ func parsePub(t *testing.T, content string) (pkgs []pubPackage, warnings []strin
 		pkgs = append(pkgs, pubPackage{p.PackageID, p.Version})
 	}
 	return pkgs, res.Warnings
-}
-
-func anyContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestPubspecLock_Identity(t *testing.T) {
@@ -123,7 +114,7 @@ func TestPubspecLock_Parse_SkipsGitSource(t *testing.T) {
 	if len(pkgs) != 1 || pkgs[0].ID != "ok" {
 		t.Errorf("expected only hosted pkg, got: %+v", pkgs)
 	}
-	if !anyContains(warnings, "from_git") {
+	if !testutil.WarningContains(warnings, "from_git") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }

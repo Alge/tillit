@@ -1,10 +1,10 @@
 package rubygems_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 	"github.com/Alge/tillit/ecosystems/rubygems"
 )
 
@@ -28,15 +28,6 @@ func parseGemfile(t *testing.T, content string) (pkgs []gemPackage, warnings []s
 		pkgs = append(pkgs, gemPackage{p.PackageID, p.Version})
 	}
 	return pkgs, res.Warnings
-}
-
-func anyContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestGemfileLock_Identity(t *testing.T) {
@@ -119,7 +110,7 @@ GEM
 	if len(pkgs) != 1 || pkgs[0].ID != "rails" {
 		t.Errorf("expected only registry pkg, got: %+v", pkgs)
 	}
-	if !anyContains(warnings, "from-git") {
+	if !testutil.WarningContains(warnings, "from-git") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }
@@ -138,7 +129,7 @@ GEM
 	if len(pkgs) != 1 || pkgs[0].ID != "rails" {
 		t.Errorf("expected only registry pkg, got: %+v", pkgs)
 	}
-	if !anyContains(warnings, "local-gem") {
+	if !testutil.WarningContains(warnings, "local-gem") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }

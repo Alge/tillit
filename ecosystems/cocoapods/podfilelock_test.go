@@ -1,11 +1,11 @@
 package cocoapods_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/Alge/tillit/ecosystems/cocoapods"
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 )
 
 type podPackage struct {
@@ -188,7 +188,7 @@ CHECKOUT OPTIONS:
 SPEC CHECKSUMS:
   PrivatePod: abc
 `)
-	if !contains(warnings, "PrivatePod") {
+	if !testutil.WarningContains(warnings, "PrivatePod") {
 		t.Errorf("expected warning about external pod, got: %v", warnings)
 	}
 }
@@ -205,13 +205,4 @@ func TestPodfileLock_Parse_EmptyLockfile(t *testing.T) {
 	if len(pkgs) != 0 {
 		t.Errorf("expected no packages, got: %+v", pkgs)
 	}
-}
-
-func contains(xs []string, sub string) bool {
-	for _, x := range xs {
-		if strings.Contains(x, sub) {
-			return true
-		}
-	}
-	return false
 }

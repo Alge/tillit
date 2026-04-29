@@ -1,11 +1,11 @@
 package composer_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/Alge/tillit/ecosystems/composer"
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 )
 
 type composerPackage struct {
@@ -28,15 +28,6 @@ func parseComposer(t *testing.T, content string) (pkgs []composerPackage, warnin
 		pkgs = append(pkgs, composerPackage{p.PackageID, p.Version})
 	}
 	return pkgs, res.Warnings
-}
-
-func anyContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestComposerLock_Identity(t *testing.T) {
@@ -138,7 +129,7 @@ func TestComposerLock_Parse_SkipsDevBranchVersions(t *testing.T) {
     {"name": "vendor/branch", "version": "dev-master", "dist": {"shasum": "a"}}
   ]
 }`)
-	if !anyContains(warnings, "dev-master") {
+	if !testutil.WarningContains(warnings, "dev-master") {
 		t.Errorf("expected warning about dev branch, got: %v", warnings)
 	}
 }
@@ -155,7 +146,7 @@ func TestComposerLock_Parse_SkipsEntriesWithoutDist(t *testing.T) {
     }
   ]
 }`)
-	if !anyContains(warnings, "source-only") {
+	if !testutil.WarningContains(warnings, "source-only") {
 		t.Errorf("expected warning about missing dist, got: %v", warnings)
 	}
 }

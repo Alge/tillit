@@ -4,6 +4,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 	"github.com/Alge/tillit/ecosystems/pypi"
 )
 
@@ -131,7 +132,7 @@ resolved_reference = "abc123"
 	if len(pkgs) != 1 || pkgs[0].ID != "ok" {
 		t.Errorf("expected only registry pkg, got: %+v", pkgs)
 	}
-	if !anyContains(warnings, "from-git") {
+	if !testutil.WarningContains(warnings, "from-git") {
 		t.Errorf("expected warning mentioning skipped git pkg, got: %v", warnings)
 	}
 }

@@ -1,11 +1,11 @@
 package hexpm_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/Alge/tillit/ecosystems/hexpm"
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 )
 
 type gleamPackage struct {
@@ -28,15 +28,6 @@ func parseGleam(t *testing.T, content string) (pkgs []gleamPackage, warnings []s
 		pkgs = append(pkgs, gleamPackage{p.PackageID, p.Version, p.Hash})
 	}
 	return pkgs, res.Warnings
-}
-
-func gleamWarningContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestGleamManifest_Identity(t *testing.T) {
@@ -107,7 +98,7 @@ func TestGleamManifest_Parse_SkipsGitSource(t *testing.T) {
 	if len(pkgs) != 1 || pkgs[0].ID != "ok" {
 		t.Errorf("expected only the hex pkg, got: %+v", pkgs)
 	}
-	if !gleamWarningContains(warnings, "from_git") {
+	if !testutil.WarningContains(warnings, "from_git") {
 		t.Errorf("expected git warning, got: %v", warnings)
 	}
 }
@@ -117,7 +108,7 @@ func TestGleamManifest_Parse_SkipsLocalSource(t *testing.T) {
   { name = "from_local", version = "0.1.0", source = "local", path = "../local_lib" },
 ]
 `)
-	if !gleamWarningContains(warnings, "from_local") {
+	if !testutil.WarningContains(warnings, "from_local") {
 		t.Errorf("expected local warning, got: %v", warnings)
 	}
 }

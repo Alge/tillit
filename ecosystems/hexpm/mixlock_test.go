@@ -1,11 +1,11 @@
 package hexpm_test
 
 import (
-	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/Alge/tillit/ecosystems/hexpm"
+	"github.com/Alge/tillit/ecosystems/internal/testutil"
 )
 
 type hexpmPackage struct {
@@ -28,15 +28,6 @@ func parseMix(t *testing.T, content string) (pkgs []hexpmPackage, warnings []str
 		pkgs = append(pkgs, hexpmPackage{p.PackageID, p.Version})
 	}
 	return pkgs, res.Warnings
-}
-
-func anyContains(warns []string, sub string) bool {
-	for _, w := range warns {
-		if strings.Contains(w, sub) {
-			return true
-		}
-	}
-	return false
 }
 
 func TestMixLock_Identity(t *testing.T) {
@@ -120,7 +111,7 @@ func TestMixLock_Parse_SkipsGitSource(t *testing.T) {
 	if len(pkgs) != 1 || pkgs[0].ID != "ok" {
 		t.Errorf("expected only hex pkg, got: %+v", pkgs)
 	}
-	if !anyContains(warnings, "from_git") {
+	if !testutil.WarningContains(warnings, "from_git") {
 		t.Errorf("expected warning mentioning git pkg, got: %v", warnings)
 	}
 }
@@ -133,7 +124,7 @@ func TestMixLock_Parse_SkipsPathSource(t *testing.T) {
 	if len(pkgs) != 0 {
 		t.Errorf("expected no packages, got: %+v", pkgs)
 	}
-	if !anyContains(warnings, "from_path") {
+	if !testutil.WarningContains(warnings, "from_path") {
 		t.Errorf("expected warning, got: %v", warnings)
 	}
 }
@@ -172,7 +163,7 @@ func TestMixLock_Parse_MalformedEntryWarns(t *testing.T) {
   "junk": this is not a valid entry,
 }
 `)
-	if !anyContains(warnings, "junk") {
+	if !testutil.WarningContains(warnings, "junk") {
 		t.Errorf("expected warning about junk entry, got: %v", warnings)
 	}
 }
