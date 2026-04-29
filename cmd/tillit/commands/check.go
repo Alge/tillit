@@ -9,6 +9,7 @@ import (
 
 	"github.com/Alge/tillit/ecosystems"
 	"github.com/Alge/tillit/ecosystems/cargo"
+	"github.com/Alge/tillit/ecosystems/composer"
 	"github.com/Alge/tillit/ecosystems/gosum"
 	"github.com/Alge/tillit/ecosystems/hexpm"
 	"github.com/Alge/tillit/ecosystems/npmlock"
@@ -28,6 +29,7 @@ var adapters = []ecosystems.Adapter{
 	pypi.PdmLock{},
 	hexpm.MixLock{},
 	cargo.CargoLock{},
+	composer.ComposerLock{},
 }
 
 func Check(args []string) error {
