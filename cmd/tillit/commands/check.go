@@ -14,6 +14,7 @@ import (
 	"github.com/Alge/tillit/ecosystems/hexpm"
 	"github.com/Alge/tillit/ecosystems/npmlock"
 	"github.com/Alge/tillit/ecosystems/nuget"
+	"github.com/Alge/tillit/ecosystems/pub"
 	"github.com/Alge/tillit/ecosystems/pypi"
 	"github.com/Alge/tillit/resolver"
 )
@@ -32,6 +33,7 @@ var adapters = []ecosystems.Adapter{
 	cargo.CargoLock{},
 	composer.ComposerLock{},
 	nuget.PackagesLock{},
+	pub.PubspecLock{},
 }
 
 func Check(args []string) error {
