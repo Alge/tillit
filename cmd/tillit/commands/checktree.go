@@ -223,3 +223,49 @@ func unvisitedFromDirects(rows []row, edges map[string][]string, directs []strin
 // pkgKey is exported for parity with edge keys: build the same
 // "module@version" string that adapters emit in ParseResult.Edges.
 func pkgKey(p ecosystems.PackageRef) string { return p.PackageID + "@" + p.Version }
+
+// formatSummary returns a multi-line summary of the resolved rows split
+// into direct and indirect dependencies. Zero-count statuses are
+// hidden so the line stays focused on what's actually present. Status
+// order: rejected → unknown → allowed → vetted (severity descending).
+func formatSummary(rows []row) string {
+	direct := map[resolver.Status]int{}
+	indirect := map[resolver.Status]int{}
+	dTotal, iTotal := 0, 0
+	for _, r := range rows {
+		if r.Pkg.Direct {
+			direct[r.Status]++
+			dTotal++
+		} else {
+			indirect[r.Status]++
+			iTotal++
+		}
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Direct   (%d): %s\n", dTotal, formatStatusCounts(direct))
+	fmt.Fprintf(&b, "Indirect (%d): %s\n", iTotal, formatStatusCounts(indirect))
+	return b.String()
+}
+
+// formatStatusCounts joins the non-zero status counts into a comma-
+// separated string in severity order. Returns "—" when every status is
+// zero (i.e. there are no packages of this kind).
+func formatStatusCounts(counts map[resolver.Status]int) string {
+	order := []resolver.Status{
+		resolver.StatusRejected,
+		resolver.StatusUnknown,
+		resolver.StatusAllowed,
+		resolver.StatusVetted,
+	}
+	var parts []string
+	for _, st := range order {
+		if n := counts[st]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, st))
+		}
+	}
+	if len(parts) == 0 {
+		return "—"
+	}
+	return strings.Join(parts, ", ")
+}
