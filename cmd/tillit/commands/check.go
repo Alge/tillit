@@ -25,8 +25,8 @@ func Check(args []string) error {
 	}
 
 	if ecosystem == "" {
-		return fmt.Errorf("ecosystem is required (known: %s)\n  example: tillit check -e go\n  (a future .tillit project file will let you omit this)",
-			knownEcosystems())
+		return fmt.Errorf("ecosystem is required — pass -e <name>.\n%s\n  example: tillit check -e go\n  (a future .tillit project file will let you omit this)",
+			ecosystemList("  "))
 	}
 
 	candidates := adaptersForEcosystem(ecosystem)
@@ -157,6 +157,27 @@ func knownEcosystems() string {
 		out = append(out, a.Ecosystem())
 	}
 	return strings.Join(out, ", ")
+}
+
+// ecosystemList returns a multi-line bullet list of every known
+// ecosystem and which lockfile format(s) the corresponding adapter
+// recognises, prefixed by indent for embedding in error messages.
+func ecosystemList(indent string) string {
+	byEco := map[string][]string{}
+	var order []string
+	for _, a := range adapters {
+		eco := a.Ecosystem()
+		if _, ok := byEco[eco]; !ok {
+			order = append(order, eco)
+		}
+		byEco[eco] = append(byEco[eco], a.Name())
+	}
+	var b strings.Builder
+	b.WriteString(indent + "available ecosystems:\n")
+	for _, eco := range order {
+		fmt.Fprintf(&b, "%s  - %s (%s)\n", indent, eco, strings.Join(byEco[eco], ", "))
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // resolveCheckTarget interprets the user's path: a directory means
