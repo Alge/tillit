@@ -11,6 +11,7 @@ import (
 	"github.com/Alge/tillit/ecosystems/gosum"
 	"github.com/Alge/tillit/ecosystems/hexpm"
 	"github.com/Alge/tillit/ecosystems/npmlock"
+	"github.com/Alge/tillit/ecosystems/pub"
 	"github.com/Alge/tillit/ecosystems/pypi"
 	"github.com/Alge/tillit/resolver"
 )
@@ -26,6 +27,7 @@ var adapters = []ecosystems.Adapter{
 	pypi.PipfileLock{},
 	pypi.PdmLock{},
 	hexpm.MixLock{},
+	pub.PubspecLock{},
 }
 
 func Check(args []string) error {
