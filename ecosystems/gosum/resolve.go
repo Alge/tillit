@@ -214,4 +214,3 @@ func escapeModulePath(p string) (string, error) {
 func escapeVersion(v string) (string, error) {
 	return escapeModulePath(v)
 }
-
