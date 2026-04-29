@@ -24,8 +24,22 @@ func Check(args []string) error {
 		return err
 	}
 
+	// .tillit fills in missing flags. Anything passed on the command
+	// line wins so users can override the project default ad-hoc.
+	configDir := target
+	if info, err := os.Stat(target); err == nil && !info.IsDir() {
+		configDir = filepath.Dir(target)
+	}
+	cfg, err := loadTillitConfig(configDir)
+	if err != nil {
+		return err
+	}
+	if cfg != nil && ecosystem == "" {
+		ecosystem = cfg.Ecosystem
+	}
+
 	if ecosystem == "" {
-		return fmt.Errorf("ecosystem is required — pass -e <name>.\n%s\n  example: tillit check -e go\n  (a future .tillit project file will let you omit this)",
+		return fmt.Errorf("ecosystem is required — pass -e <name> or add a .tillit file with 'ecosystem: <name>'.\n%s\n  example: tillit check -e go",
 			ecosystemList("  "))
 	}
 
