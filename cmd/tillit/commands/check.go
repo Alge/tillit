@@ -80,12 +80,7 @@ func Check(args []string) error {
 		}
 	}
 
-	fmt.Printf("Summary: %d rejected, %d unknown, %d allowed, %d vetted\n",
-		counts[resolver.StatusRejected],
-		counts[resolver.StatusUnknown],
-		counts[resolver.StatusAllowed],
-		counts[resolver.StatusVetted],
-	)
+	fmt.Print(formatSummary(rows))
 
 	if counts[resolver.StatusRejected] > 0 {
 		os.Exit(1)

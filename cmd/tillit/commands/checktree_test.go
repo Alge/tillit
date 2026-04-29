@@ -109,6 +109,45 @@ func TestRenderTree_OrphansListedAtBottom(t *testing.T) {
 	}
 }
 
+func TestFormatSummary_SplitsDirectAndIndirect(t *testing.T) {
+	rows := []row{
+		mkRow("a", "v1", true, resolver.StatusUnknown),
+		mkRow("b", "v1", true, resolver.StatusVetted),
+		mkRow("c", "v1", false, resolver.StatusAllowed),
+		mkRow("d", "v1", false, resolver.StatusUnknown),
+		mkRow("e", "v1", false, resolver.StatusUnknown),
+	}
+	got := formatSummary(rows)
+
+	if !strings.Contains(got, "Direct") {
+		t.Errorf("expected a Direct line, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Indirect") {
+		t.Errorf("expected an Indirect line, got:\n%s", got)
+	}
+	// Direct: 1 unknown, 1 vetted
+	if !strings.Contains(got, "1 unknown") || !strings.Contains(got, "1 vetted") {
+		t.Errorf("expected direct counts in summary, got:\n%s", got)
+	}
+	// Indirect: 1 allowed, 2 unknown
+	if !strings.Contains(got, "2 unknown") || !strings.Contains(got, "1 allowed") {
+		t.Errorf("expected indirect counts, got:\n%s", got)
+	}
+}
+
+func TestFormatSummary_SkipsZeroCounts(t *testing.T) {
+	rows := []row{
+		mkRow("a", "v1", true, resolver.StatusUnknown),
+	}
+	got := formatSummary(rows)
+	if strings.Contains(got, "0 rejected") || strings.Contains(got, "0 vetted") {
+		t.Errorf("expected zero-count statuses to be hidden, got:\n%s", got)
+	}
+	if !strings.Contains(got, "1 unknown") {
+		t.Errorf("expected non-zero count present, got:\n%s", got)
+	}
+}
+
 func TestRenderTree_HandlesCycle(t *testing.T) {
 	// Defensive: cycle a→b→a should not infinite-loop. Each side gets
 	// printed once at the top of the cycle and recursion stops.
