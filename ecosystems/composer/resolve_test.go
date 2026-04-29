@@ -179,3 +179,58 @@ func TestResolveVersion_NoShasumOmitted(t *testing.T) {
 		t.Errorf("expected empty hash when shasum absent, got %q", info.Hash)
 	}
 }
+
+func TestEscapePackageName(t *testing.T) {
+	// Packagist's package URL accepts the literal `/` between vendor
+	// and package, so url.PathEscape (which would emit `%2F`) is the
+	// wrong tool for the whole name. escapePackageName must escape
+	// each side of the slash independently and rejoin with a literal
+	// `/`. This test pins that contract so a future "simplify with
+	// PathEscape" refactor doesn't silently break Packagist lookups.
+	cases := []struct {
+		in, want string
+	}{
+		// Normal lowercase name — no escaping needed; the slash
+		// must remain literal.
+		{"guzzlehttp/guzzle", "guzzlehttp/guzzle"},
+		{"symfony/console", "symfony/console"},
+
+		// Names with characters that PathEscape would escape — the
+		// segments are encoded but the joining slash is preserved.
+		{"vendor/with space", "vendor/with%20space"},
+		{"vendor/with+plus", "vendor/with+plus"}, // '+' is path-safe per RFC 3986
+
+		// Single-segment input (no slash) is rare/invalid for
+		// Composer but must not panic — it should pass through
+		// PathEscape on its own.
+		{"single", "single"},
+	}
+	for _, tc := range cases {
+		if got := escapePackageName(tc.in); got != tc.want {
+			t.Errorf("escapePackageName(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestResolveVersion_PreservesSlashInScopedName(t *testing.T) {
+	// Integration-level guard for the same contract: a vendor/package
+	// name must end up in the URL with a literal slash, not %2F. If
+	// this ever regresses Packagist returns 404 in production.
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"packages": {"my-vendor/my-pkg": [
+			{"name": "my-vendor/my-pkg", "version": "1.0.0", "dist": {"shasum": "abc"}}
+		]}}`))
+	})
+	env, cleanup := newFakePackagist(t, h)
+	defer cleanup()
+
+	if _, err := (composerCommon{}).ResolveVersion("my-vendor/my-pkg", "1.0.0"); err != nil {
+		t.Fatalf("ResolveVersion: %v", err)
+	}
+	if !strings.Contains(env.lastPath, "/p2/my-vendor/my-pkg.json") {
+		t.Errorf("expected literal slash in path, got %q", env.lastPath)
+	}
+	if strings.Contains(env.lastPath, "%2F") {
+		t.Errorf("path must not URL-encode the vendor/package separator, got %q", env.lastPath)
+	}
+}
