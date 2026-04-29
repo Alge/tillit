@@ -24,7 +24,7 @@ type DatabaseConnector interface {
 	RevokeConnection(id string, at time.Time) error
 
 	GetSignature(id string) (*models.Signature, error)
-	GetUserSignatures(signerID string, since *time.Time) ([]*models.Signature, error)
+	GetUserSignatures(signerID string, since *time.Time, includePrivate bool) ([]*models.Signature, error)
 	CreateSignature(s *models.Signature) error
 	RevokeSignature(id string, at time.Time) error
 }

@@ -15,6 +15,37 @@ func makeSignature(id, signer string) *models.Signature {
 		Algorithm:  "ed25519",
 		Sig:        "base64sig==",
 		UploadedAt: time.Now().UTC().Truncate(time.Second),
+		Public:     true,
+	}
+}
+
+func TestGetUserSignatures_PrivateFilter(t *testing.T) {
+	c := newTestConnector(t)
+
+	pub := makeSignature("pub-1", "alice")
+	priv := makeSignature("priv-1", "alice")
+	priv.Public = false
+	if err := c.CreateSignature(pub); err != nil {
+		t.Fatalf("create pub: %v", err)
+	}
+	if err := c.CreateSignature(priv); err != nil {
+		t.Fatalf("create priv: %v", err)
+	}
+
+	publicOnly, err := c.GetUserSignatures("alice", nil, false)
+	if err != nil {
+		t.Fatalf("public-only query: %v", err)
+	}
+	if len(publicOnly) != 1 || publicOnly[0].ID != "pub-1" {
+		t.Errorf("expected only the public sig in default mode, got %+v", publicOnly)
+	}
+
+	all, err := c.GetUserSignatures("alice", nil, true)
+	if err != nil {
+		t.Fatalf("all query: %v", err)
+	}
+	if len(all) != 2 {
+		t.Errorf("expected both sigs with includePrivate=true, got %+v", all)
 	}
 }
 
@@ -65,7 +96,7 @@ func TestGetUserSignatures(t *testing.T) {
 		t.Fatalf("CreateSignature failed: %v", err)
 	}
 
-	sigs, err := c.GetUserSignatures("user-a", nil)
+	sigs, err := c.GetUserSignatures("user-a", nil, false)
 	if err != nil {
 		t.Fatalf("GetUserSignatures failed: %v", err)
 	}
@@ -90,7 +121,7 @@ func TestGetUserSignaturesSince(t *testing.T) {
 	}
 
 	cutoff := time.Now().UTC().Add(-1 * time.Hour)
-	sigs, err := c.GetUserSignatures("user-a", &cutoff)
+	sigs, err := c.GetUserSignatures("user-a", &cutoff, false)
 	if err != nil {
 		t.Fatalf("GetUserSignatures failed: %v", err)
 	}

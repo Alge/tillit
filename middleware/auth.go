@@ -30,18 +30,26 @@ type signedAuthEnvelope struct {
 }
 
 // Authenticate is a middleware that verifies a tillit-signed auth
-// token in the Authorization header and, on success, attaches the
-// authenticated user to the request context. It does NOT enforce
-// authorization — callers (or downstream middleware/handlers) decide
-// whether the authenticated user is allowed to touch the URL's
-// resource.
+// token in the Authorization header. Authentication is OPTIONAL:
 //
-// Failures (missing header, malformed envelope, bad signature,
-// expired token, server mismatch) all map to 401 with a generic body
-// to avoid leaking which check failed. Server-side logs see the
-// detail for debugging.
+//   - No Authorization header → request continues anonymously (no
+//     user attached to context). Handlers see this as "unauthenticated"
+//     and can choose to serve a public subset.
+//   - Header present and valid → user is attached to the request
+//     context; handlers can match against the URL's resource id to
+//     decide what to return / accept.
+//   - Header present but invalid → 401, so a broken token never
+//     silently degrades to anonymous access.
+//
+// The middleware does NOT enforce authorization — handlers decide
+// whether anonymous access is acceptable for a given route, and
+// whether the authenticated user matches the resource being touched.
 func Authenticate(next http.Handler, database db.DatabaseConnector, expectedServer string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		user, err := authenticateRequest(r, database, expectedServer, time.Now().UTC())
 		if err != nil {
 			writeUnauthed(w)

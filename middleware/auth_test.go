@@ -85,14 +85,35 @@ func TestAuthenticate_Success(t *testing.T) {
 	}
 }
 
-func TestAuthenticate_MissingHeader(t *testing.T) {
+func TestAuthenticate_MissingHeader_PassesThroughAnonymous(t *testing.T) {
 	db := newTestDB(t)
-	h := Authenticate(okHandler(), db, "https://srv")
+	var seenUser *models.User
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, _ := requestdata.GetUser(r)
+		seenUser = u
+		w.WriteHeader(http.StatusOK)
+	})
+	h := Authenticate(next, db, "https://srv")
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected anonymous request to pass through with 200, got %d", w.Code)
+	}
+	if seenUser != nil {
+		t.Errorf("expected no user in ctx for anonymous request, got %+v", seenUser)
+	}
+}
+
+func TestAuthenticate_MalformedHeader_StillRejects(t *testing.T) {
+	db := newTestDB(t)
+	h := Authenticate(okHandler(), db, "https://srv")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Tillit not-base64!!!")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", w.Code)
+		t.Errorf("expected 401 for malformed token, got %d", w.Code)
 	}
 }
 

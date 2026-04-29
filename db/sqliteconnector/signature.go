@@ -4,77 +4,71 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Alge/tillit/db/dberrors"
 	"github.com/Alge/tillit/models"
 )
 
+const signatureColumns = `id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at, public`
+
 func (c *SqliteConnector) GetSignature(id string) (*models.Signature, error) {
-	stmt, err := c.Database.Prepare(`
-		SELECT id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at
-		FROM signatures WHERE id = ?`)
-	if err != nil {
-		return nil, fmt.Errorf("failed preparing statement: %w", err)
-	}
-	defer stmt.Close()
-
-	var uploadedAtStr string
-	var revokedAtStr *string
-	s := &models.Signature{}
-
-	err = stmt.QueryRow(id).Scan(
-		&s.ID, &s.Signer, &s.Payload, &s.Algorithm, &s.Sig,
-		&uploadedAtStr, &s.Revoked, &revokedAtStr,
-	)
+	row := c.Database.QueryRow(`SELECT `+signatureColumns+` FROM signatures WHERE id = ?`, id)
+	s, err := scanSignature(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, dberrors.NewObjectNotFoundError("no such signature")
 		}
 		return nil, err
 	}
+	return s, nil
+}
 
-	s.UploadedAt, err = time.Parse(time.RFC3339, uploadedAtStr)
+func scanSignature(row interface {
+	Scan(...any) error
+}) (*models.Signature, error) {
+	s := &models.Signature{}
+	var uploadedAtStr string
+	var revokedAtStr *string
+	if err := row.Scan(
+		&s.ID, &s.Signer, &s.Payload, &s.Algorithm, &s.Sig,
+		&uploadedAtStr, &s.Revoked, &revokedAtStr, &s.Public,
+	); err != nil {
+		return nil, err
+	}
+	t, err := time.Parse(time.RFC3339, uploadedAtStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing uploaded_at: %w", err)
 	}
+	s.UploadedAt = t
 	if revokedAtStr != nil {
-		t, err := time.Parse(time.RFC3339, *revokedAtStr)
+		rt, err := time.Parse(time.RFC3339, *revokedAtStr)
 		if err != nil {
 			return nil, fmt.Errorf("failed parsing revoked_at: %w", err)
 		}
-		s.RevokedAt = &t
+		s.RevokedAt = &rt
 	}
 	return s, nil
 }
 
-func (c *SqliteConnector) GetUserSignatures(signerID string, since *time.Time) ([]*models.Signature, error) {
-	var (
-		stmt *sql.Stmt
-		err  error
+// GetUserSignatures returns the public signatures for signerID. When
+// includePrivate is true the result also includes private rows — only
+// the authenticated owner should ask for that.
+func (c *SqliteConnector) GetUserSignatures(signerID string, since *time.Time, includePrivate bool) ([]*models.Signature, error) {
+	where := `signer = ?`
+	args := []any{signerID}
+	if !includePrivate {
+		where += ` AND public = 1`
+	}
+	if since != nil {
+		where += ` AND uploaded_at >= ?`
+		args = append(args, since.UTC().Format(time.RFC3339))
+	}
+	rows, err := c.Database.Query(
+		`SELECT `+signatureColumns+` FROM signatures WHERE `+where+` ORDER BY uploaded_at ASC`,
+		args...,
 	)
-	if since != nil {
-		stmt, err = c.Database.Prepare(`
-			SELECT id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at
-			FROM signatures WHERE signer = ? AND uploaded_at >= ?
-			ORDER BY uploaded_at ASC`)
-	} else {
-		stmt, err = c.Database.Prepare(`
-			SELECT id, signer, payload, algorithm, sig, uploaded_at, revoked, revoked_at
-			FROM signatures WHERE signer = ?
-			ORDER BY uploaded_at ASC`)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed preparing statement: %w", err)
-	}
-	defer stmt.Close()
-
-	var rows *sql.Rows
-	if since != nil {
-		rows, err = stmt.Query(signerID, since.UTC().Format(time.RFC3339))
-	} else {
-		rows, err = stmt.Query(signerID)
-	}
 	if err != nil {
 		return nil, fmt.Errorf("failed querying signatures: %w", err)
 	}
@@ -82,25 +76,9 @@ func (c *SqliteConnector) GetUserSignatures(signerID string, since *time.Time) (
 
 	var sigs []*models.Signature
 	for rows.Next() {
-		var uploadedAtStr string
-		var revokedAtStr *string
-		s := &models.Signature{}
-		if err := rows.Scan(
-			&s.ID, &s.Signer, &s.Payload, &s.Algorithm, &s.Sig,
-			&uploadedAtStr, &s.Revoked, &revokedAtStr,
-		); err != nil {
-			return nil, fmt.Errorf("failed scanning signature row: %w", err)
-		}
-		s.UploadedAt, err = time.Parse(time.RFC3339, uploadedAtStr)
+		s, err := scanSignature(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed parsing uploaded_at: %w", err)
-		}
-		if revokedAtStr != nil {
-			t, err := time.Parse(time.RFC3339, *revokedAtStr)
-			if err != nil {
-				return nil, fmt.Errorf("failed parsing revoked_at: %w", err)
-			}
-			s.RevokedAt = &t
+			return nil, fmt.Errorf("failed scanning signature row: %w", err)
 		}
 		sigs = append(sigs, s)
 	}
@@ -108,17 +86,11 @@ func (c *SqliteConnector) GetUserSignatures(signerID string, since *time.Time) (
 }
 
 func (c *SqliteConnector) CreateSignature(s *models.Signature) error {
-	stmt, err := c.Database.Prepare(`
-		INSERT INTO signatures (id, signer, payload, algorithm, sig, uploaded_at)
-		VALUES (?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("failed preparing statement: %w", err)
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(
+	_, err := c.Database.Exec(
+		`INSERT INTO signatures (id, signer, payload, algorithm, sig, uploaded_at, public)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.Signer, s.Payload, s.Algorithm, s.Sig,
-		s.UploadedAt.UTC().Format(time.RFC3339),
+		s.UploadedAt.UTC().Format(time.RFC3339), s.Public,
 	)
 	return err
 }
@@ -136,7 +108,7 @@ func (c *SqliteConnector) RevokeSignature(id string, at time.Time) error {
 }
 
 func (c *SqliteConnector) CreateSignatureTable() error {
-	stmt, err := c.Database.Prepare(`
+	if _, err := c.Database.Exec(`
 		CREATE TABLE IF NOT EXISTS signatures (
 			id          TEXT PRIMARY KEY,
 			signer      TEXT NOT NULL,
@@ -145,13 +117,17 @@ func (c *SqliteConnector) CreateSignatureTable() error {
 			sig         TEXT NOT NULL,
 			uploaded_at TEXT NOT NULL,
 			revoked     INTEGER NOT NULL DEFAULT 0,
-			revoked_at  TEXT
-		);`)
-	if err != nil {
+			revoked_at  TEXT,
+			public      INTEGER NOT NULL DEFAULT 1
+		);`); err != nil {
 		return err
 	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec()
-	return err
+	// Older databases predate the public column. ALTER TABLE … ADD COLUMN
+	// fails if the column already exists; we treat that as success.
+	if _, err := c.Database.Exec(
+		`ALTER TABLE signatures ADD COLUMN public INTEGER NOT NULL DEFAULT 1`,
+	); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	return nil
 }
