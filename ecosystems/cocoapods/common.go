@@ -6,7 +6,10 @@ package cocoapods
 import "github.com/Alge/tillit/ecosystems/internal/semver"
 
 // cocoapodsCommon carries the methods shared by every CocoaPods
-// lockfile adapter.
+// lockfile adapter in this package: identity, version comparison,
+// version validation, and registry-side existence/hash resolution.
+// Per-format adapters embed it so they only need to implement Name,
+// CanParse, and Parse.
 type cocoapodsCommon struct{}
 
 func (cocoapodsCommon) Ecosystem() string { return "cocoapods" }

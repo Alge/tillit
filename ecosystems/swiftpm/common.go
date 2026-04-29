@@ -15,7 +15,12 @@ package swiftpm
 import "github.com/Alge/tillit/ecosystems/internal/semver"
 
 // swiftpmCommon carries the methods shared by every Swift Package
-// Manager lockfile adapter.
+// Manager lockfile adapter in this package: identity, version
+// comparison, and version validation. Unlike the other ecosystems,
+// the embedded ResolveVersion here is a no-op (see resolve.go) —
+// Swift has no widely-adopted canonical-hash registry. Per-format
+// adapters embed it so they only need to implement Name, CanParse,
+// and Parse.
 type swiftpmCommon struct{}
 
 func (swiftpmCommon) Ecosystem() string { return "swiftpm" }

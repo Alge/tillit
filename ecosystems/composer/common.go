@@ -7,9 +7,11 @@ package composer
 
 import "github.com/Alge/tillit/ecosystems/internal/semver"
 
-// composerCommon carries the methods shared by every Composer lockfile
-// adapter in this package. Per-format adapters embed it so they only
-// need to implement Name, CanParse, and Parse.
+// composerCommon carries the methods shared by every Composer
+// lockfile adapter in this package: identity, version comparison,
+// version validation, and registry-side existence/hash resolution.
+// Per-format adapters embed it so they only need to implement Name,
+// CanParse, and Parse.
 type composerCommon struct{}
 
 func (composerCommon) Ecosystem() string { return "composer" }

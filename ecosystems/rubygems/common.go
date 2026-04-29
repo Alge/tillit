@@ -6,8 +6,10 @@
 package rubygems
 
 // rubygemsCommon carries the methods shared by every rubygems
-// lockfile adapter. Per-format adapters embed it so they only need
-// to implement Name, CanParse, and Parse.
+// lockfile adapter in this package: identity, version comparison,
+// version validation, and registry-side existence/hash resolution.
+// Per-format adapters embed it so they only need to implement Name,
+// CanParse, and Parse.
 type rubygemsCommon struct{}
 
 func (rubygemsCommon) Ecosystem() string { return "rubygems" }
