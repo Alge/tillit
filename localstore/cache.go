@@ -119,6 +119,25 @@ func (s *Store) GetCachedSignaturesBySigner(signerID string) ([]*CachedSignature
 	return sigs, nil
 }
 
+// DeleteCachedSignature removes the row with the given ID. Returns an
+// error if no row matched, so callers can distinguish "deleted" from
+// "didn't exist". Used by 'tillit delete' on signatures that have not
+// yet been pushed.
+func (s *Store) DeleteCachedSignature(id string) error {
+	res, err := s.db.Exec(`DELETE FROM cached_signatures WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("cached signature %q not found", id)
+	}
+	return nil
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }
