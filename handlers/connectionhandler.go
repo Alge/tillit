@@ -44,6 +44,10 @@ func CreateConnectionHandler(database db.DatabaseConnector) http.HandlerFunc {
 			http.Error(w, "Missing connection id", http.StatusBadRequest)
 			return
 		}
+		if expected := models.SignatureID(input.Payload, input.Sig); input.ID != expected {
+			http.Error(w, "Connection id does not match payload+sig hash", http.StatusBadRequest)
+			return
+		}
 
 		sigBytes, err := base64.RawURLEncoding.DecodeString(input.Sig)
 		if err != nil {
