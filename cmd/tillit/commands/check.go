@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/Alge/tillit/ecosystems"
 	"github.com/Alge/tillit/ecosystems/gosum"
@@ -28,7 +29,7 @@ func Check(args []string) error {
 		return err
 	}
 
-	pkgs, warnings, err := parseLockfile(adapter, lockfile)
+	pkgs, edges, warnings, err := parseLockfile(adapter, lockfile)
 	if err != nil {
 		return err
 	}
@@ -65,14 +66,18 @@ func Check(args []string) error {
 
 	fmt.Printf("Checking %s (%s, %d package(s))\n\n", lockfile, adapter.Name(), len(pkgs))
 
-	// Group output by status, in order: rejected, unknown, allowed, vetted.
-	for _, st := range []resolver.Status{
-		resolver.StatusRejected,
-		resolver.StatusUnknown,
-		resolver.StatusAllowed,
-		resolver.StatusVetted,
-	} {
-		printStatusGroup(rows, st)
+	if edges != nil {
+		renderTree(os.Stdout, rows, edges)
+	} else {
+		// Group output by status, in order: rejected, unknown, allowed, vetted.
+		for _, st := range []resolver.Status{
+			resolver.StatusRejected,
+			resolver.StatusUnknown,
+			resolver.StatusAllowed,
+			resolver.StatusVetted,
+		} {
+			printStatusGroup(rows, st)
+		}
 	}
 
 	fmt.Printf("Summary: %d rejected, %d unknown, %d allowed, %d vetted\n",
@@ -110,18 +115,29 @@ func knownFormats() string {
 	return out
 }
 
-func parseLockfile(adapter ecosystems.Adapter, lockfile string) ([]ecosystems.PackageRef, []string, error) {
+func parseLockfile(adapter ecosystems.Adapter, lockfile string) ([]ecosystems.PackageRef, map[string][]string, []string, error) {
 	abs, err := filepath.Abs(lockfile)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	dir, name := filepath.Split(abs)
 	fsys := os.DirFS(dir)
 	res, err := adapter.Parse(fsys, name)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse %s: %w", lockfile, err)
+		return nil, nil, nil, fmt.Errorf("parse %s: %w", lockfile, err)
 	}
-	return res.Packages, res.Warnings, nil
+	warnings := res.Warnings
+	edges := res.Edges
+	// Adapters that need shell-out for graph data implement GraphResolver
+	// separately so Parse can stay pure (and unit-testable with MapFS).
+	if edges == nil {
+		if g, ok := adapter.(ecosystems.GraphResolver); ok {
+			e, gw := g.Graph(strings.TrimSuffix(dir, string(filepath.Separator)))
+			edges = e
+			warnings = append(warnings, gw...)
+		}
+	}
+	return res.Packages, edges, warnings, nil
 }
 
 type row struct {

@@ -33,8 +33,15 @@ type PackageRef struct {
 // ParseResult separates fatal errors (returned via err) from non-fatal
 // issues like unrecognised lines or local-path entries we can't vet. Callers
 // decide whether to surface warnings to the user or ignore them.
+//
+// Edges, when non-nil, is the dependency graph keyed by "package@version"
+// strings; each value is the list of that package's direct dependencies in
+// the same form. The CLI uses Edges to render hierarchical output.
+// Adapters that can't cheaply compute the full graph leave it nil and the
+// CLI falls back to flat output.
 type ParseResult struct {
 	Packages []PackageRef
+	Edges    map[string][]string
 	Warnings []string
 }
 
@@ -73,4 +80,15 @@ type Adapter interface {
 	// rule. Used by the resolver for output ordering and by sign-diff
 	// to verify that FromVersion precedes ToVersion.
 	CompareVersions(a, b string) int
+}
+
+// GraphResolver is an optional adapter capability: it returns the full
+// dependency graph for a project given the on-disk root directory.
+// Adapters that need to shell out to a package-manager binary (e.g.
+// `go mod graph`) implement this so the CLI can render hierarchical
+// output. Adapters that don't implement it cause the CLI to fall back
+// to flat output. The returned warnings are non-fatal and surfaced to
+// the user the same way Parse warnings are.
+type GraphResolver interface {
+	Graph(rootDir string) (edges map[string][]string, warnings []string)
 }
