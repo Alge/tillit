@@ -19,10 +19,7 @@ func newInspectStore(t *testing.T) *localstore.Store {
 	return s
 }
 
-// TestRunInspect_StripsLeadingHash locks in that the leading '#' from
-// query output is stripped before lookup, so users can paste an ID
-// straight from `query` (when their shell preserves the '#').
-func TestRunInspect_StripsLeadingHash(t *testing.T) {
+func TestRunInspect_LooksUpByPrefix(t *testing.T) {
 	s := newInspectStore(t)
 	now := time.Now().UTC().Truncate(time.Second)
 	s.SaveCachedSignature(&localstore.CachedSignature{
@@ -36,7 +33,7 @@ func TestRunInspect_StripsLeadingHash(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	if err := runInspect(s, &buf, "#a3f9d2c1"); err != nil {
+	if err := runInspect(s, &buf, "a3f9d2c1"); err != nil {
 		t.Fatalf("runInspect failed: %v", err)
 	}
 	if !strings.Contains(buf.String(), "a3f9d2c1b8e74f5a") {

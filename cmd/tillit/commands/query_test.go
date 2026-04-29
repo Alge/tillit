@@ -17,8 +17,8 @@ func TestVerboseDecisionLine_IncludesShortSignatureID(t *testing.T) {
 		Version:     "v3.0.0",
 	}
 	out := verboseDecisionLine(d)
-	if !strings.Contains(out, "#a3f9d2c1b8e7") {
-		t.Errorf("expected short hash %q in output, got: %q", "#a3f9d2c1b8e7", out)
+	if !strings.Contains(out, "a3f9d2c1b8e7") {
+		t.Errorf("expected short hash %q in output, got: %q", "a3f9d2c1b8e7", out)
 	}
 }
 
@@ -31,7 +31,7 @@ func TestDecisionsSummary_IncludesShortSignatureID(t *testing.T) {
 		Version:     "v3.0.0",
 	}}
 	out := decisionsSummary(ds)
-	if !strings.Contains(out, "#a3f9d2c1b8e7") {
-		t.Errorf("expected short hash %q in summary, got: %q", "#a3f9d2c1b8e7", out)
+	if !strings.Contains(out, "a3f9d2c1b8e7") {
+		t.Errorf("expected short hash %q in summary, got: %q", "a3f9d2c1b8e7", out)
 	}
 }

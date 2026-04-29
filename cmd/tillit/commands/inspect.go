@@ -16,9 +16,7 @@ import (
 // `#` so the user can paste an ID straight from `query` output.
 func Inspect(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: tillit inspect <signature_id>\n" +
-			"  (the leading '#' shown in 'query' output is optional; if you keep it,\n" +
-			"   quote the id — most shells treat '#' as a comment marker)")
+		return fmt.Errorf("usage: tillit inspect <signature_id>")
 	}
 	s, err := openStore()
 	if err != nil {
@@ -29,12 +27,11 @@ func Inspect(args []string) error {
 }
 
 func runInspect(s *localstore.Store, w io.Writer, id string) error {
-	q := strings.TrimPrefix(id, "#")
-	if q == "" {
+	if id == "" {
 		return fmt.Errorf("signature id is empty")
 	}
 
-	sig, err := s.LookupCachedSignature(q)
+	sig, err := s.LookupCachedSignature(id)
 	if err != nil {
 		return err
 	}
